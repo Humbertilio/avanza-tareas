@@ -1,0 +1,5 @@
+data/*.json
+data/*.tmp
+!data/.gitkeep
+.env
+node_modules/

@@ -1,0 +1,13 @@
+{
+  "name": "gestor-tareas-empleados",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gestor multiusuario de tareas para empleados",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

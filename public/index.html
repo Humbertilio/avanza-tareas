@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Avanza · Tareas de equipo</title><link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main id="loginView" class="login-shell">
+    <section class="welcome"><span class="brand-mark">A</span><p class="eyebrow">TRABAJO EN EQUIPO</p><h1>Convierte cada tarea en <em>avance.</em></h1><p>Asigna, acompaña y completa el trabajo de tu equipo desde cualquier lugar.</p></section>
+    <section class="login-card"><h2>Bienvenido</h2><p>Ingresa a tu espacio de trabajo</p><form id="loginForm"><label>Usuario<input name="username" autocomplete="username" required placeholder="Tu usuario"></label><label>Contraseña<input name="password" type="password" autocomplete="current-password" required placeholder="••••••••"></label><button>Ingresar <span>→</span></button><p id="loginError" class="error"></p></form><small>Acceso inicial: admin / Admin123!</small></section>
+  </main>
+
+  <div id="appView" class="app hidden">
+    <aside><div class="logo"><span class="brand-mark">A</span><strong>Avanza</strong></div><nav><button class="nav active" data-view="tasks">▦ <span>Mis tareas</span></button><button class="nav" data-view="new">＋ <span>Nueva tarea</span></button><button id="usersNav" class="nav hidden" data-view="users">♙ <span>Empleados</span></button></nav><div class="profile"><div class="avatar" id="avatar"></div><div><strong id="profileName"></strong><small id="profileRole"></small></div><button id="logout" title="Salir">↪</button></div></aside>
+    <main class="content">
+      <header><div><p class="eyebrow">PANEL DE TRABAJO</p><h1 id="greeting">Tus tareas</h1></div><button class="primary mobile-new" data-view="new">＋ Nueva tarea</button></header>
+      <section id="tasksView">
+        <div class="stats"><article><span>Asignadas a mí</span><strong id="assignedCount">0</strong><i class="blue">↓</i></article><article><span>En progreso</span><strong id="progressCount">0</strong><i class="orange">◷</i></article><article><span>Finalizadas</span><strong id="doneCount">0</strong><i class="green">✓</i></article></div>
+        <div class="section-title"><div><h2>Mis tareas</h2><p>Trabajo que te han asignado</p></div><div class="filters"><button class="filter active" data-filter="open">Pendientes</button><button class="filter" data-filter="done">Finalizadas</button><button class="filter" data-filter="created">Creadas por mí</button></div></div>
+        <div id="taskList" class="task-list"></div>
+      </section>
+      <section id="newView" class="panel hidden"><h2>Nueva tarea</h2><p>Define el trabajo y asígnalo a cualquier empleado.</p><form id="taskForm"><label>Título<input name="title" maxlength="140" required placeholder="¿Qué se necesita hacer?"></label><label>Descripción<textarea name="description" maxlength="2000" rows="5" placeholder="Agrega contexto e indicaciones"></textarea></label><label>Asignar a<select name="assigneeId" id="assigneeSelect" required></select></label><button class="primary">Crear tarea</button><p class="formMessage"></p></form></section>
+      <section id="usersView" class="panel hidden"><h2>Empleados</h2><p>Crea las cuentas que usarán los integrantes del equipo.</p><form id="userForm" class="user-form"><label>Nombre<input name="name" required maxlength="100"></label><label>Usuario<input name="username" required pattern="[A-Za-z0-9._-]{3,60}"></label><label>Contraseña<input name="password" type="password" required minlength="8"></label><button class="primary">Agregar empleado</button><p class="formMessage"></p></form><div id="userList" class="user-list"></div></section>
+    </main>
+  </div>
+  <div id="toast" class="toast"></div><script src="/app.js"></script>
+</body></html>
