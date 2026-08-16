@@ -2,12 +2,14 @@
 <html lang="es">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Avanza · Tareas de equipo</title><link rel="stylesheet" href="/styles.css">
+  <title>Avanza · Tareas de equipo</title>
+  <meta name="theme-color" content="#293653"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Avanza">
+  <link rel="manifest" href="/manifest.json"><link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/icon.svg"><link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <main id="loginView" class="login-shell">
     <section class="welcome"><span class="brand-mark">A</span><p class="eyebrow">TRABAJO EN EQUIPO</p><h1>Convierte cada tarea en <em>avance.</em></h1><p>Asigna, acompaña y completa el trabajo de tu equipo desde cualquier lugar.</p></section>
-    <section class="login-card"><h2>Bienvenido</h2><p>Ingresa a tu espacio de trabajo</p><form id="loginForm"><label>Usuario<input name="username" autocomplete="username" required placeholder="Tu usuario"></label><label>Contraseña<input name="password" type="password" autocomplete="current-password" required placeholder="••••••••"></label><button>Ingresar <span>→</span></button><p id="loginError" class="error"></p></form><small>Acceso inicial: admin / Admin123!</small></section>
+    <section class="login-card"><h2>Bienvenido</h2><p>Ingresa a tu espacio de trabajo</p><button id="installApp" class="install-button hidden" type="button"><span>▣</span> Instalar en este teléfono</button><p id="installHelp" class="install-help hidden"></p><form id="loginForm"><label>Usuario<input name="username" autocomplete="username" required placeholder="Tu usuario"></label><label>Contraseña<input name="password" type="password" autocomplete="current-password" required placeholder="••••••••"></label><button>Ingresar <span>→</span></button><p id="loginError" class="error"></p></form><small>Acceso inicial: admin / Admin123!</small></section>
   </main>
 
   <div id="appView" class="app hidden">

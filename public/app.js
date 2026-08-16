@@ -1,6 +1,10 @@
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
-let me = null, users = [], tasks = [], filter = 'open';
+let me = null, users = [], tasks = [], filter = 'open', installPrompt = null;
+
+if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js').catch(() => {}));
+window.addEventListener('beforeinstallprompt', event => { event.preventDefault(); installPrompt = event; $('#installApp').classList.remove('hidden'); });
+window.addEventListener('appinstalled', () => { installPrompt = null; $('#installApp').classList.add('hidden'); toast('Avanza quedó instalada'); });
 
 async function request(url, options = {}) {
   const response = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
@@ -45,6 +49,7 @@ async function updateStatus(event) { try { await request(`/api/tasks/${event.tar
 function showView(name) { ['tasks','new','users'].forEach(x => $(`#${x}View`).classList.toggle('hidden', x !== name)); $$('.nav').forEach(x => x.classList.toggle('active', x.dataset.view === name)); $('#greeting').textContent = name === 'tasks' ? `Hola, ${me.name.split(' ')[0]}` : name === 'new' ? 'Crear una tarea' : 'Gestión del equipo'; }
 
 $('#loginForm').addEventListener('submit', async event => { event.preventDefault(); $('#loginError').textContent=''; const input=Object.fromEntries(new FormData(event.target)); try { me=(await request('/api/login',{method:'POST',body:JSON.stringify(input)})).user; await enterApp(); } catch(error){ $('#loginError').textContent=error.message; } });
+$('#installApp').addEventListener('click', async () => { const help=$('#installHelp'); if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;$('#installApp').classList.add('hidden');return;} help.textContent=/iphone|ipad|ipod/i.test(navigator.userAgent)?'En iPhone: pulsa Compartir y luego “Añadir a pantalla de inicio”.':'Abre el menú del navegador y selecciona “Instalar aplicación” o “Añadir a pantalla principal”.';help.classList.remove('hidden'); });
 $('#logout').addEventListener('click', async () => { await request('/api/logout',{method:'POST'}); location.reload(); });
 $$('[data-view]').forEach(button => button.addEventListener('click', () => showView(button.dataset.view)));
 $$('.filter').forEach(button => button.addEventListener('click', () => { filter=button.dataset.filter; $$('.filter').forEach(x=>x.classList.toggle('active',x===button)); renderTasks(); }));

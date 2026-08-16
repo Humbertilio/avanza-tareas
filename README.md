@@ -2,6 +2,8 @@
 
 Aplicación web multiusuario, adaptable a teléfonos y computadoras. Cualquier empleado puede crear y asignar una tarea; solamente el empleado asignado puede cambiar su avance entre 25%, 50%, 75% y Finalizada.
 
+Una vez publicada mediante HTTPS, puede instalarse en la pantalla principal del teléfono con su propio icono, como una aplicación (PWA).
+
 ## Puesta en marcha
 
 Requiere Node.js 18 o posterior.
