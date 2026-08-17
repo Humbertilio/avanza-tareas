@@ -28,23 +28,36 @@ async function enterApp() {
 }
 async function refresh() {
   [users, tasks] = await Promise.all([request('/api/users').then(x => x.users), request('/api/tasks').then(x => x.tasks)]);
-  $('#assigneeSelect').innerHTML = '<option value="">Selecciona un empleado</option>' + users.map(x => `<option value="${x.id}">${escapeHtml(x.name)} · @${escapeHtml(x.username)}</option>`).join('');
+  $('#assigneeSelect').innerHTML = '<option value="">Selecciona un empleado</option>' + users.filter(x => x.active).map(x => `<option value="${x.id}">${escapeHtml(x.name)} · @${escapeHtml(x.username)}</option>`).join('');
   renderTasks(); renderUsers();
 }
 function escapeHtml(value) { const el = document.createElement('span'); el.textContent = value || ''; return el.innerHTML; }
 function renderTasks() {
+  if (me.role === 'admin') {
+    $('#assignedLabel').textContent = 'Todas las tareas'; $('#assignedCount').textContent = tasks.length;
+    $('#progressCount').textContent = tasks.filter(x => x.progress < 100).length; $('#doneCount').textContent = tasks.filter(x => x.progress === 100).length;
+    $('#tasksTitle').textContent = 'Control de tareas'; $('#tasksSubtitle').textContent = 'Vista general de todas las tareas del equipo'; $('#taskFilters').classList.add('hidden');
+    $('#taskList').className = 'admin-table-wrap';
+    $('#taskList').innerHTML = tasks.length ? `<table class="admin-table"><thead><tr><th>Tarea</th><th>Fecha</th><th>Creada por</th><th>Asignada a</th><th>Status</th></tr></thead><tbody>${tasks.map(taskRow).join('')}</tbody></table>` : '<div class="empty">Todavía no hay tareas.</div>';
+    $$('#taskList select').forEach(select => select.addEventListener('change', updateStatus));
+    return;
+  }
   const assigned = tasks.filter(x => x.assigneeId === me.id);
   $('#assignedCount').textContent = assigned.length; $('#progressCount').textContent = assigned.filter(x => x.progress < 100).length; $('#doneCount').textContent = assigned.filter(x => x.progress === 100).length;
   let shown = filter === 'created' ? tasks.filter(x => x.creatorId === me.id) : assigned.filter(x => filter === 'done' ? x.progress === 100 : x.progress < 100);
-  $('#taskList').innerHTML = shown.length ? shown.map(taskCard).join('') : '<div class="empty">No hay tareas en esta sección.</div>';
+  $('#taskList').className = 'task-list'; $('#taskList').innerHTML = shown.length ? shown.map(taskCard).join('') : '<div class="empty">No hay tareas en esta sección.</div>';
   $$('.task select').forEach(select => select.addEventListener('change', updateStatus));
 }
+function statusOptions(task) { return `<option value="0" ${task.progress===0?'selected':''}>0%</option><option value="25" ${task.progress===25?'selected':''}>25%</option><option value="50" ${task.progress===50?'selected':''}>50%</option><option value="75" ${task.progress===75?'selected':''}>75%</option><option value="100" ${task.progress===100?'selected':''}>Finalizada</option>`; }
+function taskRow(task) { const status=task.progress===100?'Finalizada':`${task.progress}%`, control=task.assigneeId===me.id?`<select data-id="${task.id}" aria-label="Cambiar estado de ${escapeHtml(task.title)}">${statusOptions(task)}</select>`:`<span class="status-pill">${status}</span>`; return `<tr><td><strong>${escapeHtml(task.title)}</strong>${task.description?`<small>${escapeHtml(task.description)}</small>`:''}</td><td>${dateText(task.createdAt)}</td><td>${escapeHtml(task.creatorName)}</td><td>${escapeHtml(task.assigneeName)}</td><td>${control}</td></tr>`; }
 function taskCard(task) {
   const mine = task.assigneeId === me.id;
   const status = task.progress === 100 ? 'Finalizada' : `${task.progress}%`;
-  return `<article class="task"><div><h3>${escapeHtml(task.title)}</h3>${task.description ? `<p>${escapeHtml(task.description)}</p>` : ''}<div class="meta">Asignada a <b>${escapeHtml(task.assigneeName)}</b> · Creada por ${escapeHtml(task.creatorName)} · ${dateText(task.createdAt)}</div><div class="progress-row"><div class="track"><i style="width:${task.progress}%"></i></div><strong>${status}</strong></div></div><div class="status-control">${mine ? `<select data-id="${task.id}" aria-label="Cambiar estado"><option value="25" ${task.progress===25?'selected':''}>25%</option><option value="50" ${task.progress===50?'selected':''}>50%</option><option value="75" ${task.progress===75?'selected':''}>75%</option><option value="100" ${task.progress===100?'selected':''}>Finalizada</option></select>` : `<span class="status-pill">${status}</span>`}</div></article>`;
+  return `<article class="task"><div><h3>${escapeHtml(task.title)}</h3>${task.description ? `<p>${escapeHtml(task.description)}</p>` : ''}<div class="meta">Asignada a <b>${escapeHtml(task.assigneeName)}</b> · Creada por ${escapeHtml(task.creatorName)} · ${dateText(task.createdAt)}</div><div class="progress-row"><div class="track"><i style="width:${task.progress}%"></i></div><strong>${status}</strong></div></div><div class="status-control">${mine ? `<select data-id="${task.id}" aria-label="Cambiar estado">${statusOptions(task)}</select>` : `<span class="status-pill">${status}</span>`}</div></article>`;
 }
-function renderUsers() { $('#userList').innerHTML = users.map(user => `<div class="user-item"><strong>${escapeHtml(user.name)}</strong><span>@${escapeHtml(user.username)} · ${user.role === 'admin' ? 'Administrador' : 'Empleado'}</span></div>`).join(''); }
+function renderUsers() { $('#userList').innerHTML = users.map(user => `<div class="user-item ${user.active?'':'inactive'}"><div><strong>${escapeHtml(user.name)}</strong><span>@${escapeHtml(user.username)} · ${user.role === 'admin' ? 'Administrador' : 'Empleado'} · ${user.active?'Activo':'Desactivado'}</span></div>${me.role==='admin'?`<button class="edit-user" data-id="${user.id}">Editar</button>`:''}</div>`).join(''); $$('.edit-user').forEach(button=>button.addEventListener('click',()=>openEditUser(button.dataset.id))); }
+function openEditUser(id) { const user=users.find(x=>x.id===id), form=$('#editUserForm'); if(!user)return; form.elements.id.value=user.id; form.elements.name.value=user.name; form.elements.username.value=user.username; form.elements.password.value=''; form.elements.role.value=user.role; form.elements.active.checked=user.active; form.querySelector('.formMessage').textContent=''; $('#editUserModal').classList.remove('hidden'); }
+function closeEditUser() { $('#editUserModal').classList.add('hidden'); }
 async function updateStatus(event) { try { await request(`/api/tasks/${event.target.dataset.id}/status`, { method: 'PATCH', body: JSON.stringify({ progress: Number(event.target.value) }) }); await refresh(); toast('Estado actualizado'); } catch (error) { toast(error.message); await refresh(); } }
 function showView(name) { ['tasks','new','users'].forEach(x => $(`#${x}View`).classList.toggle('hidden', x !== name)); $$('.nav').forEach(x => x.classList.toggle('active', x.dataset.view === name)); $('#greeting').textContent = name === 'tasks' ? `Hola, ${me.name.split(' ')[0]}` : name === 'new' ? 'Crear una tarea' : 'Gestión del equipo'; }
 
@@ -54,5 +67,7 @@ $('#logout').addEventListener('click', async () => { await request('/api/logout'
 $$('[data-view]').forEach(button => button.addEventListener('click', () => showView(button.dataset.view)));
 $$('.filter').forEach(button => button.addEventListener('click', () => { filter=button.dataset.filter; $$('.filter').forEach(x=>x.classList.toggle('active',x===button)); renderTasks(); }));
 $('#taskForm').addEventListener('submit', async event => { event.preventDefault(); const msg=event.target.querySelector('.formMessage'); msg.textContent=''; try { await request('/api/tasks',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(event.target)))}); event.target.reset(); await refresh(); filter='open'; showView('tasks'); toast('Tarea creada y asignada'); } catch(error){msg.textContent=error.message;} });
-$('#userForm').addEventListener('submit', async event => { event.preventDefault(); const msg=event.target.querySelector('.formMessage'); msg.textContent=''; try { await request('/api/users',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(event.target)))}); event.target.reset(); await refresh(); toast('Empleado creado'); } catch(error){msg.textContent=error.message;} });
+$('#userForm').addEventListener('submit', async event => { event.preventDefault(); const msg=event.target.querySelector('.formMessage'); msg.textContent=''; try { await request('/api/users',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(event.target)))}); event.target.reset(); await refresh(); toast('Usuario creado'); } catch(error){msg.textContent=error.message;} });
+$('#closeEditUser').addEventListener('click', closeEditUser); $('#cancelEditUser').addEventListener('click', closeEditUser); $('#editUserModal').addEventListener('click', event=>{if(event.target===$('#editUserModal'))closeEditUser();});
+$('#editUserForm').addEventListener('submit', async event => { event.preventDefault(); const form=event.target,msg=form.querySelector('.formMessage'),id=form.elements.id.value; msg.textContent=''; const payload={name:form.elements.name.value,username:form.elements.username.value,password:form.elements.password.value,role:form.elements.role.value,active:form.elements.active.checked}; try { await request(`/api/users/${id}`,{method:'PATCH',body:JSON.stringify(payload)}); closeEditUser(); toast('Perfil actualizado'); if(id===me.id){setTimeout(()=>location.reload(),500);}else{await refresh();} } catch(error){msg.textContent=error.message;} });
 boot();

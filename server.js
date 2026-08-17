@@ -11,7 +11,8 @@ const DATA_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'database.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const SESSION_HOURS = 12;
-const STATUSES = [25, 50, 75, 100];
+const STATUSES = [0, 25, 50, 75, 100];
+const ROLES = ['admin', 'employee'];
 const sessions = new Map();
 let writeQueue = Promise.resolve();
 
@@ -133,29 +134,55 @@ async function api(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/me') return json(res, 200, { user: publicUser(user) });
 
   if (req.method === 'GET' && url.pathname === '/api/users') {
-    return json(res, 200, { users: readDb().users.filter(item => item.active).map(publicUser) });
+    const allUsers = readDb().users;
+    return json(res, 200, { users: (user.role === 'admin' ? allUsers : allUsers.filter(item => item.active)).map(publicUser) });
   }
 
   if (req.method === 'POST' && url.pathname === '/api/users') {
     if (user.role !== 'admin') return json(res, 403, { error: 'Solo el administrador puede crear empleados' });
     const input = await body(req);
     const name = clean(input.name, 100), username = clean(input.username, 60).toLowerCase();
-    const password = String(input.password || '');
-    if (!name || !/^[a-z0-9._-]{3,60}$/i.test(username) || password.length !== 4) return json(res, 400, { error: 'Nombre, usuario válido y contraseña de exactamente 4 caracteres son obligatorios' });
+    const password = String(input.password || ''), role = clean(input.role, 20) || 'employee';
+    if (!name || !/^[a-z0-9._-]{3,60}$/i.test(username) || password.length !== 4 || !ROLES.includes(role)) return json(res, 400, { error: 'Nombre, usuario válido, contraseña de 4 caracteres y rol válido son obligatorios' });
     try {
       const created = await mutateDb(db => {
         if (db.users.some(item => item.username.toLowerCase() === username)) throw Object.assign(new Error('El usuario ya existe'), { status: 409 });
         const credentials = passwordHash(password);
-        const next = { id: crypto.randomUUID(), name, username, role: 'employee', active: true, salt: credentials.salt, passwordHash: credentials.hash, createdAt: new Date().toISOString() };
+        const next = { id: crypto.randomUUID(), name, username, role, active: true, salt: credentials.salt, passwordHash: credentials.hash, createdAt: new Date().toISOString() };
         db.users.push(next); return publicUser(next);
       });
       return json(res, 201, { user: created });
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
   }
 
+  const userMatch = url.pathname.match(/^\/api\/users\/([^/]+)$/);
+  if (req.method === 'PATCH' && userMatch) {
+    if (user.role !== 'admin') return json(res, 403, { error: 'Solo el administrador puede editar usuarios' });
+    const input = await body(req), userId = userMatch[1];
+    const name = clean(input.name, 100), username = clean(input.username, 60).toLowerCase();
+    const password = String(input.password || ''), role = clean(input.role, 20);
+    const active = input.active === true;
+    if (!name || !/^[a-z0-9._-]{3,60}$/i.test(username) || !ROLES.includes(role) || (password && password.length !== 4)) return json(res, 400, { error: 'Datos inválidos; la nueva contraseña debe tener exactamente 4 caracteres' });
+    try {
+      const updated = await mutateDb(db => {
+        const found = db.users.find(item => item.id === userId);
+        if (!found) throw Object.assign(new Error('Usuario no encontrado'), { status: 404 });
+        if (db.users.some(item => item.id !== userId && item.username.toLowerCase() === username)) throw Object.assign(new Error('El nombre de usuario ya existe'), { status: 409 });
+        const removesAdmin = found.role === 'admin' && found.active && (role !== 'admin' || !active);
+        const activeAdmins = db.users.filter(item => item.role === 'admin' && item.active).length;
+        if (removesAdmin && activeAdmins === 1) throw Object.assign(new Error('Debe permanecer al menos un administrador activo'), { status: 400 });
+        found.name = name; found.username = username; found.role = role; found.active = active; found.updatedAt = new Date().toISOString();
+        if (password) { const credentials = passwordHash(password); found.salt = credentials.salt; found.passwordHash = credentials.hash; }
+        return publicUser(found);
+      });
+      return json(res, 200, { user: updated });
+    } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/tasks') {
     const db = readDb();
-    const tasks = db.tasks.filter(task => task.assigneeId === user.id || task.creatorId === user.id).map(task => ({
+    const visibleTasks = user.role === 'admin' ? db.tasks : db.tasks.filter(task => task.assigneeId === user.id || task.creatorId === user.id);
+    const tasks = visibleTasks.map(task => ({
       ...task,
       assigneeName: db.users.find(item => item.id === task.assigneeId)?.name || 'Usuario eliminado',
       creatorName: db.users.find(item => item.id === task.creatorId)?.name || 'Usuario eliminado'
@@ -171,7 +198,7 @@ async function api(req, res, url) {
       const task = await mutateDb(db => {
         if (!db.users.some(item => item.id === assigneeId && item.active)) throw Object.assign(new Error('El empleado asignado no existe'), { status: 400 });
         const now = new Date().toISOString();
-        const next = { id: crypto.randomUUID(), title, description, creatorId: user.id, assigneeId, progress: 25, createdAt: now, updatedAt: now, completedAt: null };
+        const next = { id: crypto.randomUUID(), title, description, creatorId: user.id, assigneeId, progress: 0, createdAt: now, updatedAt: now, completedAt: null };
         db.tasks.push(next); return next;
       });
       return json(res, 201, { task });
@@ -197,7 +224,7 @@ async function api(req, res, url) {
   return json(res, 404, { error: 'Ruta no encontrada' });
 }
 
-const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml' };
+const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/manifest+json; charset=utf-8', '.svg': 'image/svg+xml' };
 function staticFile(req, res, url) {
   const requested = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
   const file = path.resolve(PUBLIC_DIR, requested);
