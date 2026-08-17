@@ -141,7 +141,7 @@ async function api(req, res, url) {
     const input = await body(req);
     const name = clean(input.name, 100), username = clean(input.username, 60).toLowerCase();
     const password = String(input.password || '');
-    if (!name || !/^[a-z0-9._-]{3,60}$/i.test(username) || password.length < 8) return json(res, 400, { error: 'Nombre, usuario válido y contraseña de 8 caracteres son obligatorios' });
+    if (!name || !/^[a-z0-9._-]{3,60}$/i.test(username) || password.length !== 4) return json(res, 400, { error: 'Nombre, usuario válido y contraseña de exactamente 4 caracteres son obligatorios' });
     try {
       const created = await mutateDb(db => {
         if (db.users.some(item => item.username.toLowerCase() === username)) throw Object.assign(new Error('El usuario ya existe'), { status: 409 });
