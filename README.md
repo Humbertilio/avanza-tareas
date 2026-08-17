@@ -1,8 +1,14 @@
 # Avanza — gestor de tareas para empleados
 
-Aplicación web multiusuario, adaptable a teléfonos y computadoras. Cualquier empleado puede crear y asignar una tarea; solamente el empleado asignado puede cambiar su avance entre 25%, 50%, 75% y Finalizada.
+Aplicación web multiusuario, adaptable a teléfonos y computadoras. Cualquier empleado puede crear y asignar una tarea; solamente el empleado asignado puede cambiar su avance entre 0%, 25%, 50%, 75% y Finalizada.
 
 Una vez publicada mediante HTTPS, puede instalarse en la pantalla principal del teléfono con su propio icono, como una aplicación (PWA).
+
+Todos los usuarios pueden consultar la tabla general de tareas, ordenarla y filtrarla por columnas. Las tareas requieren una fecha de terminación, pueden ser editadas por su creador y deben ser confirmadas como leídas por el empleado asignado. Los estados disponibles son 0%, 25%, 50%, 75% y Finalizada.
+
+## Notificaciones móviles
+
+Cada empleado debe pulsar **Activar notificaciones** una vez desde su propio teléfono y aceptar el permiso del navegador. Las claves Web Push se generan automáticamente y se guardan en `data/database.json`; por ello, el disco persistente debe estar montado correctamente en producción. En iPhone, la aplicación debe agregarse primero a la pantalla de inicio.
 
 ## Puesta en marcha
 

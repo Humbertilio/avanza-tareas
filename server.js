@@ -4,6 +4,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const webpush = require('web-push');
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -51,6 +52,16 @@ function ensureDatabase() {
 function readDb() {
   ensureDatabase();
   return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+}
+
+function configurePush() {
+  const db = readDb();
+  let changed = false;
+  if (!Array.isArray(db.pushSubscriptions)) { db.pushSubscriptions = []; changed = true; }
+  if (!db.meta.vapidKeys) { db.meta.vapidKeys = webpush.generateVAPIDKeys(); changed = true; }
+  if (changed) fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+  webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:admin@avanza.local', db.meta.vapidKeys.publicKey, db.meta.vapidKeys.privateKey);
+  return db.meta.vapidKeys.publicKey;
 }
 
 function mutateDb(mutator) {
@@ -106,10 +117,24 @@ function publicUser(user) {
 }
 
 function clean(value, max = 200) { return String(value || '').trim().slice(0, max); }
+function validDate(value) { return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value + 'T00:00:00Z')); }
 function requireUser(req, res) {
   const user = currentUser(req);
   if (!user) json(res, 401, { error: 'Debes iniciar sesión' });
   return user;
+}
+
+async function notifyUser(userId, payload) {
+  const db = readDb(), subscriptions = (db.pushSubscriptions || []).filter(item => item.userId === userId);
+  const expired = [];
+  await Promise.all(subscriptions.map(async item => {
+    try { await webpush.sendNotification(item.subscription, JSON.stringify(payload)); }
+    catch (error) {
+      if (error.statusCode === 404 || error.statusCode === 410) expired.push(item.subscription.endpoint);
+      else console.error('No se pudo enviar una notificación:', error.message);
+    }
+  }));
+  if (expired.length) await mutateDb(data => { data.pushSubscriptions = (data.pushSubscriptions || []).filter(item => !expired.includes(item.subscription.endpoint)); });
 }
 
 async function api(req, res, url) {
@@ -132,6 +157,19 @@ async function api(req, res, url) {
   if (!user) return;
 
   if (req.method === 'GET' && url.pathname === '/api/me') return json(res, 200, { user: publicUser(user) });
+
+  if (req.method === 'GET' && url.pathname === '/api/push/public-key') return json(res, 200, { publicKey: PUSH_PUBLIC_KEY });
+
+  if (req.method === 'POST' && url.pathname === '/api/push/subscribe') {
+    const input = await body(req), subscription = input.subscription;
+    if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) return json(res, 400, { error: 'Suscripción no válida' });
+    await mutateDb(db => {
+      db.pushSubscriptions ||= [];
+      db.pushSubscriptions = db.pushSubscriptions.filter(item => item.subscription.endpoint !== subscription.endpoint);
+      db.pushSubscriptions.push({ userId: user.id, subscription, createdAt: new Date().toISOString() });
+    });
+    return json(res, 201, { ok: true });
+  }
 
   if (req.method === 'GET' && url.pathname === '/api/users') {
     const allUsers = readDb().users;
@@ -181,8 +219,7 @@ async function api(req, res, url) {
 
   if (req.method === 'GET' && url.pathname === '/api/tasks') {
     const db = readDb();
-    const visibleTasks = user.role === 'admin' ? db.tasks : db.tasks.filter(task => task.assigneeId === user.id || task.creatorId === user.id);
-    const tasks = visibleTasks.map(task => ({
+    const tasks = db.tasks.map(task => ({
       ...task,
       assigneeName: db.users.find(item => item.id === task.assigneeId)?.name || 'Usuario eliminado',
       creatorName: db.users.find(item => item.id === task.creatorId)?.name || 'Usuario eliminado'
@@ -192,16 +229,51 @@ async function api(req, res, url) {
 
   if (req.method === 'POST' && url.pathname === '/api/tasks') {
     const input = await body(req);
-    const title = clean(input.title, 140), description = clean(input.description, 2000), assigneeId = clean(input.assigneeId, 100);
-    if (!title || !assigneeId) return json(res, 400, { error: 'Título y empleado asignado son obligatorios' });
+    const title = clean(input.title, 140), description = clean(input.description, 2000), assigneeId = clean(input.assigneeId, 100), dueDate = clean(input.dueDate, 10);
+    if (!title || !assigneeId || !validDate(dueDate)) return json(res, 400, { error: 'Título, empleado asignado y fecha de terminación válida son obligatorios' });
     try {
       const task = await mutateDb(db => {
         if (!db.users.some(item => item.id === assigneeId && item.active)) throw Object.assign(new Error('El empleado asignado no existe'), { status: 400 });
         const now = new Date().toISOString();
-        const next = { id: crypto.randomUUID(), title, description, creatorId: user.id, assigneeId, progress: 0, createdAt: now, updatedAt: now, completedAt: null };
+        const next = { id: crypto.randomUUID(), title, description, creatorId: user.id, assigneeId, dueDate, progress: 0, acknowledgedAt: null, createdAt: now, updatedAt: now, completedAt: null };
         db.tasks.push(next); return next;
       });
+      await notifyUser(task.assigneeId, { title: 'Nueva tarea asignada', body: `${user.name}: ${task.title}`, url: '/' });
       return json(res, 201, { task });
+    } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
+
+  const taskMatch = url.pathname.match(/^\/api\/tasks\/([^/]+)$/);
+  if (req.method === 'PATCH' && taskMatch) {
+    const input = await body(req), taskId = taskMatch[1];
+    const title = clean(input.title, 140), description = clean(input.description, 2000), assigneeId = clean(input.assigneeId, 100), dueDate = clean(input.dueDate, 10);
+    if (!title || !assigneeId || !validDate(dueDate)) return json(res, 400, { error: 'Título, empleado asignado y fecha de terminación válida son obligatorios' });
+    try {
+      const result = await mutateDb(db => {
+        const found = db.tasks.find(item => item.id === taskId);
+        if (!found) throw Object.assign(new Error('Tarea no encontrada'), { status: 404 });
+        if (found.creatorId !== user.id) throw Object.assign(new Error('Solo quien creó la tarea puede editarla'), { status: 403 });
+        if (!db.users.some(item => item.id === assigneeId && item.active)) throw Object.assign(new Error('El empleado asignado no existe'), { status: 400 });
+        const reassigned = found.assigneeId !== assigneeId;
+        found.title = title; found.description = description; found.assigneeId = assigneeId; found.dueDate = dueDate; found.updatedAt = new Date().toISOString();
+        if (reassigned) found.acknowledgedAt = null;
+        return { task: found, reassigned };
+      });
+      if (result.reassigned) await notifyUser(result.task.assigneeId, { title: 'Tarea reasignada', body: `${user.name}: ${result.task.title}`, url: '/' });
+      return json(res, 200, { task: result.task });
+    } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
+
+  const acknowledgeMatch = url.pathname.match(/^\/api\/tasks\/([^/]+)\/acknowledge$/);
+  if (req.method === 'POST' && acknowledgeMatch) {
+    try {
+      const task = await mutateDb(db => {
+        const found = db.tasks.find(item => item.id === acknowledgeMatch[1]);
+        if (!found) throw Object.assign(new Error('Tarea no encontrada'), { status: 404 });
+        if (found.assigneeId !== user.id) throw Object.assign(new Error('Solo el empleado asignado puede confirmar la lectura'), { status: 403 });
+        found.acknowledgedAt ||= new Date().toISOString(); return found;
+      });
+      return json(res, 200, { task });
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
   }
 
@@ -236,6 +308,7 @@ function staticFile(req, res, url) {
 }
 
 ensureDatabase();
+const PUSH_PUBLIC_KEY = configurePush();
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   try { if (url.pathname.startsWith('/api/')) await api(req, res, url); else staticFile(req, res, url); }

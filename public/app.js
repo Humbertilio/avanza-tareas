@@ -1,6 +1,8 @@
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
-let me = null, users = [], tasks = [], filter = 'open', installPrompt = null;
+let me = null, users = [], tasks = [], installPrompt = null;
+let sortState = { key: 'createdAt', direction: 'desc' };
+const taskFilters = { title: '', createdFrom: '', createdTo: '', creator: '', assignee: '', dueFrom: '', dueTo: '', status: '' };
 
 if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/service-worker.js').catch(() => {}));
 window.addEventListener('beforeinstallprompt', event => { event.preventDefault(); installPrompt = event; $('#installApp').classList.remove('hidden'); });
@@ -15,6 +17,8 @@ async function request(url, options = {}) {
 function toast(message) { const node = $('#toast'); node.textContent = message; node.classList.add('show'); setTimeout(() => node.classList.remove('show'), 2600); }
 function initials(name) { return name.split(/\s+/).map(x => x[0]).join('').slice(0, 2).toUpperCase(); }
 function dateText(value) { return new Intl.DateTimeFormat('es', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value)); }
+function dateTimeText(value) { return new Intl.DateTimeFormat('es', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value)); }
+function dueDateText(value) { if (!value) return 'Sin fecha'; const [year,month,day]=value.split('-'); return `${day}/${month}/${year}`; }
 
 async function boot() {
   try { me = (await request('/api/me')).user; await enterApp(); }
@@ -28,46 +32,63 @@ async function enterApp() {
 }
 async function refresh() {
   [users, tasks] = await Promise.all([request('/api/users').then(x => x.users), request('/api/tasks').then(x => x.tasks)]);
-  $('#assigneeSelect').innerHTML = '<option value="">Selecciona un empleado</option>' + users.filter(x => x.active).map(x => `<option value="${x.id}">${escapeHtml(x.name)} · @${escapeHtml(x.username)}</option>`).join('');
+  const assigneeOptions = '<option value="">Selecciona un empleado</option>' + users.filter(x => x.active).map(x => `<option value="${x.id}">${escapeHtml(x.name)}</option>`).join('');
+  $('#assigneeSelect').innerHTML = assigneeOptions; $('#editAssigneeSelect').innerHTML = assigneeOptions;
   renderTasks(); renderUsers();
 }
 function escapeHtml(value) { const el = document.createElement('span'); el.textContent = value || ''; return el.innerHTML; }
 function renderTasks() {
-  if (me.role === 'admin') {
-    $('#assignedLabel').textContent = 'Todas las tareas'; $('#assignedCount').textContent = tasks.length;
-    $('#progressCount').textContent = tasks.filter(x => x.progress < 100).length; $('#doneCount').textContent = tasks.filter(x => x.progress === 100).length;
-    $('#tasksTitle').textContent = 'Control de tareas'; $('#tasksSubtitle').textContent = 'Vista general de todas las tareas del equipo'; $('#taskFilters').classList.add('hidden');
-    $('#taskList').className = 'admin-table-wrap';
-    $('#taskList').innerHTML = tasks.length ? `<table class="admin-table"><thead><tr><th>Tarea</th><th>Fecha</th><th>Creada por</th><th>Asignada a</th><th>Status</th></tr></thead><tbody>${tasks.map(taskRow).join('')}</tbody></table>` : '<div class="empty">Todavía no hay tareas.</div>';
-    $$('#taskList select').forEach(select => select.addEventListener('change', updateStatus));
-    return;
-  }
-  const assigned = tasks.filter(x => x.assigneeId === me.id);
-  $('#assignedCount').textContent = assigned.length; $('#progressCount').textContent = assigned.filter(x => x.progress < 100).length; $('#doneCount').textContent = assigned.filter(x => x.progress === 100).length;
-  let shown = filter === 'created' ? tasks.filter(x => x.creatorId === me.id) : assigned.filter(x => filter === 'done' ? x.progress === 100 : x.progress < 100);
-  $('#taskList').className = 'task-list'; $('#taskList').innerHTML = shown.length ? shown.map(taskCard).join('') : '<div class="empty">No hay tareas en esta sección.</div>';
-  $$('.task select').forEach(select => select.addEventListener('change', updateStatus));
+  $('#assignedLabel').textContent = 'Todas las tareas'; $('#assignedCount').textContent = tasks.length;
+  $('#progressCount').textContent = tasks.filter(x => x.progress < 100).length; $('#doneCount').textContent = tasks.filter(x => x.progress === 100).length;
+  const shown = filteredAndSortedTasks();
+  $('#taskList').className = 'admin-table-wrap';
+  $('#taskList').innerHTML = `<table class="admin-table excel-table"><thead><tr>${taskHeaders()}</tr></thead><tbody>${shown.length ? shown.map(taskRow).join('') : '<tr><td colspan="8"><div class="empty">No hay tareas que coincidan con los filtros.</div></td></tr>'}</tbody></table>`;
+  $$('#taskList select[data-id]').forEach(select => select.addEventListener('change', updateStatus));
+  $$('.sort-btn').forEach(button => button.addEventListener('click',()=>{sortState={key:button.dataset.sort,direction:button.dataset.direction};renderTasks();}));
+  $$('.task-filter').forEach(control => control.addEventListener('change',()=>{taskFilters[control.dataset.filter]=control.value;renderTasks();}));
+  $$('.clear-filter').forEach(button => button.addEventListener('click',()=>{button.dataset.clear.split(',').forEach(key=>taskFilters[key]='');renderTasks();}));
+  $$('.edit-task').forEach(button=>button.addEventListener('click',()=>openEditTask(button.dataset.id)));
+  $$('.acknowledge-task').forEach(button=>button.addEventListener('click',()=>acknowledgeTask(button.dataset.id)));
 }
 function statusOptions(task) { return `<option value="0" ${task.progress===0?'selected':''}>0%</option><option value="25" ${task.progress===25?'selected':''}>25%</option><option value="50" ${task.progress===50?'selected':''}>50%</option><option value="75" ${task.progress===75?'selected':''}>75%</option><option value="100" ${task.progress===100?'selected':''}>Finalizada</option>`; }
-function taskRow(task) { const status=task.progress===100?'Finalizada':`${task.progress}%`, control=task.assigneeId===me.id?`<select data-id="${task.id}" aria-label="Cambiar estado de ${escapeHtml(task.title)}">${statusOptions(task)}</select>`:`<span class="status-pill">${status}</span>`; return `<tr><td><strong>${escapeHtml(task.title)}</strong>${task.description?`<small>${escapeHtml(task.description)}</small>`:''}</td><td>${dateText(task.createdAt)}</td><td>${escapeHtml(task.creatorName)}</td><td>${escapeHtml(task.assigneeName)}</td><td>${control}</td></tr>`; }
-function taskCard(task) {
-  const mine = task.assigneeId === me.id;
-  const status = task.progress === 100 ? 'Finalizada' : `${task.progress}%`;
-  return `<article class="task"><div><h3>${escapeHtml(task.title)}</h3>${task.description ? `<p>${escapeHtml(task.description)}</p>` : ''}<div class="meta">Asignada a <b>${escapeHtml(task.assigneeName)}</b> · Creada por ${escapeHtml(task.creatorName)} · ${dateText(task.createdAt)}</div><div class="progress-row"><div class="track"><i style="width:${task.progress}%"></i></div><strong>${status}</strong></div></div><div class="status-control">${mine ? `<select data-id="${task.id}" aria-label="Cambiar estado">${statusOptions(task)}</select>` : `<span class="status-pill">${status}</span>`}</div></article>`;
+function sortButtons(key) { return `<span class="sort-controls"><button class="sort-btn ${sortState.key===key&&sortState.direction==='asc'?'active':''}" data-sort="${key}" data-direction="asc" title="Orden ascendente">↑</button><button class="sort-btn ${sortState.key===key&&sortState.direction==='desc'?'active':''}" data-sort="${key}" data-direction="desc" title="Orden descendente">↓</button></span>`; }
+function filterMenu(keys, content) { const active=keys.some(key=>taskFilters[key]); return `<details class="excel-filter ${active?'active':''}"><summary title="Filtrar columna">⌄</summary><div class="filter-menu">${content}<button class="clear-filter" data-clear="${keys.join(',')}" type="button">Limpiar filtro</button></div></details>`; }
+function taskHeaders() {
+  const creators=[...new Set(tasks.map(x=>x.creatorName))].sort(), assignees=[...new Set(tasks.map(x=>x.assigneeName))].sort();
+  const select=(key,values,label)=>`<label>${label}<select class="task-filter" data-filter="${key}"><option value="">Todos</option>${values.map(x=>`<option ${taskFilters[key]===x?'selected':''}>${escapeHtml(x)}</option>`).join('')}</select></label>`;
+  const dates=(from,to)=>`<label>Desde<input class="task-filter" data-filter="${from}" type="date" value="${taskFilters[from]}"></label><label>Hasta<input class="task-filter" data-filter="${to}" type="date" value="${taskFilters[to]}"></label>`;
+  return `<th>Tarea ${sortButtons('title')}${filterMenu(['title'],`<label>Contiene<input class="task-filter" data-filter="title" value="${escapeHtml(taskFilters.title)}"></label>`)}</th><th>Fecha ${sortButtons('createdAt')}${filterMenu(['createdFrom','createdTo'],dates('createdFrom','createdTo'))}</th><th>Creada por ${sortButtons('creatorName')}${filterMenu(['creator'],select('creator',creators,'Persona'))}</th><th>Asignada a ${sortButtons('assigneeName')}${filterMenu(['assignee'],select('assignee',assignees,'Persona'))}</th><th>Terminación ${sortButtons('dueDate')}${filterMenu(['dueFrom','dueTo'],dates('dueFrom','dueTo'))}</th><th>Status ${sortButtons('progress')}${filterMenu(['status'],`<label>Estado<select class="task-filter" data-filter="status"><option value="">Todos</option>${[0,25,50,75,100].map(x=>`<option value="${x}" ${String(x)===taskFilters.status?'selected':''}>${x===100?'Finalizada':x+'%'}</option>`).join('')}</select></label>`)}</th><th>Lectura</th><th>Acciones</th>`;
+}
+function filteredAndSortedTasks() {
+  const filtered=tasks.filter(task=>(!taskFilters.title||task.title.toLowerCase().includes(taskFilters.title.toLowerCase()))&&(!taskFilters.createdFrom||task.createdAt.slice(0,10)>=taskFilters.createdFrom)&&(!taskFilters.createdTo||task.createdAt.slice(0,10)<=taskFilters.createdTo)&&(!taskFilters.creator||task.creatorName===taskFilters.creator)&&(!taskFilters.assignee||task.assigneeName===taskFilters.assignee)&&(!taskFilters.dueFrom||task.dueDate>=taskFilters.dueFrom)&&(!taskFilters.dueTo||task.dueDate<=taskFilters.dueTo)&&(!taskFilters.status||String(task.progress)===taskFilters.status));
+  return filtered.sort((a,b)=>{let left=a[sortState.key]??'',right=b[sortState.key]??'';if(typeof left==='string'){left=left.toLowerCase();right=String(right).toLowerCase();}const result=left<right?-1:left>right?1:0;return sortState.direction==='asc'?result:-result;});
+}
+function taskRow(task) {
+  const status=task.progress===100?'Finalizada':`${task.progress}%`, statusControl=task.assigneeId===me.id?`<select data-id="${task.id}" aria-label="Cambiar estado">${statusOptions(task)}</select>`:`<span class="status-pill">${status}</span>`;
+  const reading=task.acknowledgedAt?`<span class="read-ok">✓ Leída<br><small>${dateTimeText(task.acknowledgedAt)}</small></span>`:task.assigneeId===me.id?`<button class="acknowledge-task" data-id="${task.id}">Confirmar lectura</button>`:'<span class="read-pending">Pendiente</span>';
+  const actions=task.creatorId===me.id?`<button class="edit-task" data-id="${task.id}">Editar</button>`:'—';
+  return `<tr><td><strong>${escapeHtml(task.title)}</strong>${task.description?`<small>${escapeHtml(task.description)}</small>`:''}</td><td>${dateText(task.createdAt)}</td><td>${escapeHtml(task.creatorName)}</td><td>${escapeHtml(task.assigneeName)}</td><td>${dueDateText(task.dueDate)}</td><td>${statusControl}</td><td>${reading}</td><td>${actions}</td></tr>`;
 }
 function renderUsers() { $('#userList').innerHTML = users.map(user => `<div class="user-item ${user.active?'':'inactive'}"><div><strong>${escapeHtml(user.name)}</strong><span>@${escapeHtml(user.username)} · ${user.role === 'admin' ? 'Administrador' : 'Empleado'} · ${user.active?'Activo':'Desactivado'}</span></div>${me.role==='admin'?`<button class="edit-user" data-id="${user.id}">Editar</button>`:''}</div>`).join(''); $$('.edit-user').forEach(button=>button.addEventListener('click',()=>openEditUser(button.dataset.id))); }
 function openEditUser(id) { const user=users.find(x=>x.id===id), form=$('#editUserForm'); if(!user)return; form.elements.id.value=user.id; form.elements.name.value=user.name; form.elements.username.value=user.username; form.elements.password.value=''; form.elements.role.value=user.role; form.elements.active.checked=user.active; form.querySelector('.formMessage').textContent=''; $('#editUserModal').classList.remove('hidden'); }
 function closeEditUser() { $('#editUserModal').classList.add('hidden'); }
+function openEditTask(id) { const task=tasks.find(x=>x.id===id),form=$('#editTaskForm'); if(!task)return; form.elements.id.value=task.id;form.elements.title.value=task.title;form.elements.description.value=task.description||'';form.elements.assigneeId.value=task.assigneeId;form.elements.dueDate.value=task.dueDate||'';form.querySelector('.formMessage').textContent='';$('#editTaskModal').classList.remove('hidden'); }
+function closeEditTask() { $('#editTaskModal').classList.add('hidden'); }
+async function acknowledgeTask(id) { try { await request(`/api/tasks/${id}/acknowledge`,{method:'POST'});await refresh();toast('Lectura confirmada'); } catch(error){toast(error.message);} }
 async function updateStatus(event) { try { await request(`/api/tasks/${event.target.dataset.id}/status`, { method: 'PATCH', body: JSON.stringify({ progress: Number(event.target.value) }) }); await refresh(); toast('Estado actualizado'); } catch (error) { toast(error.message); await refresh(); } }
 function showView(name) { ['tasks','new','users'].forEach(x => $(`#${x}View`).classList.toggle('hidden', x !== name)); $$('.nav').forEach(x => x.classList.toggle('active', x.dataset.view === name)); $('#greeting').textContent = name === 'tasks' ? `Hola, ${me.name.split(' ')[0]}` : name === 'new' ? 'Crear una tarea' : 'Gestión del equipo'; }
+function urlBase64ToUint8Array(value) { const padding='='.repeat((4-value.length%4)%4),base64=(value+padding).replace(/-/g,'+').replace(/_/g,'/'),raw=atob(base64);return Uint8Array.from([...raw].map(char=>char.charCodeAt(0))); }
+async function enableNotifications() { if(!('serviceWorker'in navigator)||!('PushManager'in window)){return toast('Este navegador no admite notificaciones push');} try { const permission=await Notification.requestPermission();if(permission!=='granted')return toast('Permiso de notificaciones no concedido');const registration=await navigator.serviceWorker.ready,key=(await request('/api/push/public-key')).publicKey;const subscription=await registration.pushManager.getSubscription()||await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(key)});await request('/api/push/subscribe',{method:'POST',body:JSON.stringify({subscription})});$('#enableNotifications').textContent='✓ Notificaciones activas';$('#enableNotifications').classList.add('enabled');toast('Notificaciones activadas'); } catch(error){toast(error.message||'No se pudieron activar las notificaciones');} }
 
 $('#loginForm').addEventListener('submit', async event => { event.preventDefault(); $('#loginError').textContent=''; const input=Object.fromEntries(new FormData(event.target)); try { me=(await request('/api/login',{method:'POST',body:JSON.stringify(input)})).user; await enterApp(); } catch(error){ $('#loginError').textContent=error.message; } });
 $('#installApp').addEventListener('click', async () => { const help=$('#installHelp'); if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;$('#installApp').classList.add('hidden');return;} help.textContent=/iphone|ipad|ipod/i.test(navigator.userAgent)?'En iPhone: pulsa Compartir y luego “Añadir a pantalla de inicio”.':'Abre el menú del navegador y selecciona “Instalar aplicación” o “Añadir a pantalla principal”.';help.classList.remove('hidden'); });
 $('#logout').addEventListener('click', async () => { await request('/api/logout',{method:'POST'}); location.reload(); });
 $$('[data-view]').forEach(button => button.addEventListener('click', () => showView(button.dataset.view)));
-$$('.filter').forEach(button => button.addEventListener('click', () => { filter=button.dataset.filter; $$('.filter').forEach(x=>x.classList.toggle('active',x===button)); renderTasks(); }));
-$('#taskForm').addEventListener('submit', async event => { event.preventDefault(); const msg=event.target.querySelector('.formMessage'); msg.textContent=''; try { await request('/api/tasks',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(event.target)))}); event.target.reset(); await refresh(); filter='open'; showView('tasks'); toast('Tarea creada y asignada'); } catch(error){msg.textContent=error.message;} });
+$('#taskForm').addEventListener('submit', async event => { event.preventDefault(); const msg=event.target.querySelector('.formMessage'); msg.textContent=''; try { await request('/api/tasks',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(event.target)))}); event.target.reset(); await refresh(); showView('tasks'); toast('Tarea creada y asignada'); } catch(error){msg.textContent=error.message;} });
 $('#userForm').addEventListener('submit', async event => { event.preventDefault(); const msg=event.target.querySelector('.formMessage'); msg.textContent=''; try { await request('/api/users',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(event.target)))}); event.target.reset(); await refresh(); toast('Usuario creado'); } catch(error){msg.textContent=error.message;} });
 $('#closeEditUser').addEventListener('click', closeEditUser); $('#cancelEditUser').addEventListener('click', closeEditUser); $('#editUserModal').addEventListener('click', event=>{if(event.target===$('#editUserModal'))closeEditUser();});
 $('#editUserForm').addEventListener('submit', async event => { event.preventDefault(); const form=event.target,msg=form.querySelector('.formMessage'),id=form.elements.id.value; msg.textContent=''; const payload={name:form.elements.name.value,username:form.elements.username.value,password:form.elements.password.value,role:form.elements.role.value,active:form.elements.active.checked}; try { await request(`/api/users/${id}`,{method:'PATCH',body:JSON.stringify(payload)}); closeEditUser(); toast('Perfil actualizado'); if(id===me.id){setTimeout(()=>location.reload(),500);}else{await refresh();} } catch(error){msg.textContent=error.message;} });
+$('#closeEditTask').addEventListener('click', closeEditTask); $('#cancelEditTask').addEventListener('click', closeEditTask); $('#editTaskModal').addEventListener('click',event=>{if(event.target===$('#editTaskModal'))closeEditTask();});
+$('#editTaskForm').addEventListener('submit', async event=>{event.preventDefault();const form=event.target,msg=form.querySelector('.formMessage'),id=form.elements.id.value;msg.textContent='';const payload={title:form.elements.title.value,description:form.elements.description.value,assigneeId:form.elements.assigneeId.value,dueDate:form.elements.dueDate.value};try{await request(`/api/tasks/${id}`,{method:'PATCH',body:JSON.stringify(payload)});closeEditTask();await refresh();toast('Tarea actualizada');}catch(error){msg.textContent=error.message;}});
+$('#enableNotifications').addEventListener('click',enableNotifications);
 boot();
