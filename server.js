@@ -12,6 +12,7 @@ const DATA_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'database.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const SESSION_HOURS = 12;
+const TASK_RETENTION_MS = 15 * 24 * 60 * 60 * 1000;
 const STATUSES = [0, 25, 50, 75, 100];
 const ROLES = ['admin', 'employee'];
 const sessions = new Map();
@@ -137,6 +138,12 @@ async function notifyUser(userId, payload) {
   if (expired.length) await mutateDb(data => { data.pushSubscriptions = (data.pushSubscriptions || []).filter(item => !expired.includes(item.subscription.endpoint)); });
 }
 
+async function purgeExpiredTasks() {
+  const cutoff = Date.now() - TASK_RETENTION_MS;
+  const hasExpired = readDb().tasks.some(task => task.progress === 100 && task.completedAt && new Date(task.completedAt).getTime() <= cutoff);
+  if (hasExpired) await mutateDb(db => { db.tasks = db.tasks.filter(task => !(task.progress === 100 && task.completedAt && new Date(task.completedAt).getTime() <= cutoff)); });
+}
+
 async function api(req, res, url) {
   if (req.method === 'POST' && url.pathname === '/api/login') {
     const input = await body(req);
@@ -218,9 +225,11 @@ async function api(req, res, url) {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/tasks') {
+    await purgeExpiredTasks();
     const db = readDb();
     const tasks = db.tasks.map(task => ({
       ...task,
+      notes: Array.isArray(task.notes) ? task.notes : [],
       assigneeName: db.users.find(item => item.id === task.assigneeId)?.name || 'Usuario eliminado',
       creatorName: db.users.find(item => item.id === task.creatorId)?.name || 'Usuario eliminado'
     })).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -229,13 +238,13 @@ async function api(req, res, url) {
 
   if (req.method === 'POST' && url.pathname === '/api/tasks') {
     const input = await body(req);
-    const title = clean(input.title, 140), description = clean(input.description, 2000), assigneeId = clean(input.assigneeId, 100), dueDate = clean(input.dueDate, 10);
-    if (!title || !assigneeId || !validDate(dueDate)) return json(res, 400, { error: 'Título, empleado asignado y fecha de terminación válida son obligatorios' });
+    const rawTitle = String(input.title || '').trim(), title = clean(rawTitle, 50), description = clean(input.description, 2000), assigneeId = clean(input.assigneeId, 100), dueDate = clean(input.dueDate, 10);
+    if (!title || rawTitle.length > 50 || !assigneeId || !validDate(dueDate)) return json(res, 400, { error: 'Título de hasta 50 caracteres, empleado asignado y fecha de terminación válida son obligatorios' });
     try {
       const task = await mutateDb(db => {
         if (!db.users.some(item => item.id === assigneeId && item.active)) throw Object.assign(new Error('El empleado asignado no existe'), { status: 400 });
         const now = new Date().toISOString();
-        const next = { id: crypto.randomUUID(), title, description, creatorId: user.id, assigneeId, dueDate, progress: 0, acknowledgedAt: null, createdAt: now, updatedAt: now, completedAt: null };
+        const next = { id: crypto.randomUUID(), title, description, notes: [], creatorId: user.id, assigneeId, dueDate, progress: 0, acknowledgedAt: null, createdAt: now, updatedAt: now, completedAt: null };
         db.tasks.push(next); return next;
       });
       await notifyUser(task.assigneeId, { title: 'Nueva tarea asignada', body: `${user.name}: ${task.title}`, url: '/' });
@@ -246,8 +255,8 @@ async function api(req, res, url) {
   const taskMatch = url.pathname.match(/^\/api\/tasks\/([^/]+)$/);
   if (req.method === 'PATCH' && taskMatch) {
     const input = await body(req), taskId = taskMatch[1];
-    const title = clean(input.title, 140), description = clean(input.description, 2000), assigneeId = clean(input.assigneeId, 100), dueDate = clean(input.dueDate, 10);
-    if (!title || !assigneeId || !validDate(dueDate)) return json(res, 400, { error: 'Título, empleado asignado y fecha de terminación válida son obligatorios' });
+    const rawTitle = String(input.title || '').trim(), title = clean(rawTitle, 50), assigneeId = clean(input.assigneeId, 100), dueDate = clean(input.dueDate, 10);
+    if (!title || rawTitle.length > 50 || !assigneeId || !validDate(dueDate)) return json(res, 400, { error: 'Título de hasta 50 caracteres, empleado asignado y fecha de terminación válida son obligatorios' });
     try {
       const result = await mutateDb(db => {
         const found = db.tasks.find(item => item.id === taskId);
@@ -255,12 +264,28 @@ async function api(req, res, url) {
         if (found.creatorId !== user.id) throw Object.assign(new Error('Solo quien creó la tarea puede editarla'), { status: 403 });
         if (!db.users.some(item => item.id === assigneeId && item.active)) throw Object.assign(new Error('El empleado asignado no existe'), { status: 400 });
         const reassigned = found.assigneeId !== assigneeId;
-        found.title = title; found.description = description; found.assigneeId = assigneeId; found.dueDate = dueDate; found.updatedAt = new Date().toISOString();
+        found.title = title; found.assigneeId = assigneeId; found.dueDate = dueDate; found.updatedAt = new Date().toISOString();
         if (reassigned) found.acknowledgedAt = null;
         return { task: found, reassigned };
       });
       if (result.reassigned) await notifyUser(result.task.assigneeId, { title: 'Tarea reasignada', body: `${user.name}: ${result.task.title}`, url: '/' });
       return json(res, 200, { task: result.task });
+    } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
+
+  const noteMatch = url.pathname.match(/^\/api\/tasks\/([^/]+)\/notes$/);
+  if (req.method === 'POST' && noteMatch) {
+    const input = await body(req), text = clean(input.text, 2000);
+    if (!text) return json(res, 400, { error: 'La anotación no puede estar vacía' });
+    try {
+      const task = await mutateDb(db => {
+        const found = db.tasks.find(item => item.id === noteMatch[1]);
+        if (!found) throw Object.assign(new Error('Tarea no encontrada'), { status: 404 });
+        if (found.creatorId !== user.id && found.assigneeId !== user.id) throw Object.assign(new Error('Solo el creador o el empleado asignado pueden agregar anotaciones'), { status: 403 });
+        found.notes ||= []; found.notes.push({ text, createdAt: new Date().toISOString() }); found.updatedAt = new Date().toISOString();
+        return found;
+      });
+      return json(res, 201, { task });
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
   }
 
@@ -315,5 +340,7 @@ const server = http.createServer(async (req, res) => {
   catch (error) { console.error(error); if (!res.headersSent) json(res, error.status || 500, { error: error.status ? error.message : 'Error interno del servidor' }); else res.end(); }
 });
 server.listen(PORT, HOST, () => console.log(`Gestor disponible en http://localhost:${PORT}`));
+purgeExpiredTasks().catch(error => console.error('No se pudo depurar tareas:', error.message));
+setInterval(() => purgeExpiredTasks().catch(error => console.error('No se pudo depurar tareas:', error.message)), 60 * 60 * 1000).unref();
 
 module.exports = { server, readDb, STATUSES };

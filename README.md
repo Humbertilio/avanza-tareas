@@ -6,9 +6,13 @@ Una vez publicada mediante HTTPS, puede instalarse en la pantalla principal del 
 
 Todos los usuarios pueden consultar la tabla general de tareas, ordenarla y filtrarla por columnas. Las tareas requieren una fecha de terminación, pueden ser editadas por su creador y deben ser confirmadas como leídas por el empleado asignado. Los estados disponibles son 0%, 25%, 50%, 75% y Finalizada.
 
+Los títulos admiten hasta 50 caracteres. La descripción conserva un historial acumulativo de anotaciones que pueden agregar el creador y el empleado asignado, sin sobrescribir lo anterior. Las filas finalizadas aparecen tachadas y se eliminan automáticamente 15 días después de su finalización; si se reabre una tarea, el plazo se cancela.
+
 ## Notificaciones móviles
 
 Cada empleado debe pulsar **Activar notificaciones** una vez desde su propio teléfono y aceptar el permiso del navegador. Las claves Web Push se generan automáticamente y se guardan en `data/database.json`; por ello, el disco persistente debe estar montado correctamente en producción. En iPhone, la aplicación debe agregarse primero a la pantalla de inicio.
+
+El botón **Instalar aplicación** incluye un asistente para seleccionar iPhone, Android o computadora y muestra las instrucciones apropiadas para cada dispositivo.
 
 ## Puesta en marcha
 
