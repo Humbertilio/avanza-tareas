@@ -401,13 +401,29 @@ async function api(req, res, url) {
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
   }
 
+  const machineTaskMatch = url.pathname.match(/^\/api\/machine-tasks\/([^/]+)$/);
+  if (req.method === 'PATCH' && machineTaskMatch) {
+    const input = await body(req), rawTitle = String(input.title || '').trim(), title = clean(rawTitle, 50), description = clean(input.description, 2000), dueDate = clean(input.dueDate, 10);
+    if (!title || rawTitle.length > 50 || !validDate(dueDate)) return json(res, 400, { error: 'Título de hasta 50 caracteres y fecha válida son obligatorios' });
+    try {
+      const task = await mutateDb(db => {
+        const found = (db.machineTasks || []).find(item => item.id === machineTaskMatch[1]);
+        if (!found) throw Object.assign(new Error('Tarea no encontrada'), { status: 404 });
+        if (found.creatorId !== user.id && user.role !== 'admin') throw Object.assign(new Error('Solo el creador o el administrador pueden modificar la tarea'), { status: 403 });
+        found.title = title; found.description = description; found.dueDate = dueDate; found.updatedAt = new Date().toISOString();
+        return found;
+      });
+      return json(res, 200, { task });
+    } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
+
   const machineTaskAction = url.pathname.match(/^\/api\/machine-tasks\/([^/]+)\/(acknowledge|status|notes)$/);
   if (machineTaskAction && req.method === 'POST' && machineTaskAction[2] === 'acknowledge') {
     try { const task = await mutateDb(db => { const found=(db.machineTasks||[]).find(item=>item.id===machineTaskAction[1]); if(!found)throw Object.assign(new Error('Tarea no encontrada'),{status:404}); if(found.assigneeId!==user.id)throw Object.assign(new Error('Solo el responsable puede confirmar la lectura'),{status:403}); found.acknowledgedAt ||= new Date().toISOString(); return found; }); return json(res,200,{task}); }
     catch(error){return json(res,error.status||500,{error:error.message});}
   }
   if (machineTaskAction && req.method === 'PATCH' && machineTaskAction[2] === 'status') {
-    const input=await body(req),progress=Number(input.progress); if(!STATUSES.includes(progress))return json(res,400,{error:'Estado no permitido'});
+    const input=await body(req),progress=Number(input.progress); if(progress!==100)return json(res,400,{error:'El único estado permitido es Finalizada'});
     try { const task=await mutateDb(db=>{const found=(db.machineTasks||[]).find(item=>item.id===machineTaskAction[1]);if(!found)throw Object.assign(new Error('Tarea no encontrada'),{status:404});if(found.assigneeId!==user.id)throw Object.assign(new Error('Solo el responsable puede cambiar el estado'),{status:403});found.progress=progress;found.updatedAt=new Date().toISOString();found.completedAt=progress===100?found.updatedAt:null;return found;});return json(res,200,{task}); }
     catch(error){return json(res,error.status||500,{error:error.message});}
   }

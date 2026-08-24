@@ -1,65 +1,48 @@
 (() => {
-  let machineMe = null, machineUsers = [], machines = [], machineTasks = [];
-  const q = selector => document.querySelector(selector);
-  const qa = selector => [...document.querySelectorAll(selector)];
-  const esc = value => { const node=document.createElement('span');node.textContent=value||'';return node.innerHTML; };
-  const mRequest = async (url, options={}) => { const response=await fetch(url,{headers:{'Content-Type':'application/json'},...options});const data=await response.json();if(!response.ok)throw new Error(data.error||'No se pudo completar la operación');return data; };
-  const mToast = message => { const node=q('#toast');node.textContent=message;node.classList.add('show');setTimeout(()=>node.classList.remove('show'),2600); };
-  const date = value => { if(!value)return 'Sin fecha';const [y,m,d]=value.split('-');return `${d}/${m}/${y}`; };
-  const statusOptions = task => [0,25,50,75,100].map(value=>`<option value="${value}" ${task.progress===value?'selected':''}>${value===100?'Finalizada':value+'%'}</option>`).join('');
+  let machineMe=null,machineUsers=[],machines=[],machineTasks=[],selectedMachineId=null;
+  const q=s=>document.querySelector(s),qa=s=>[...document.querySelectorAll(s)];
+  const esc=v=>{const n=document.createElement('span');n.textContent=v||'';return n.innerHTML;};
+  const api=async(url,options={})=>{const r=await fetch(url,{headers:{'Content-Type':'application/json'},...options}),d=await r.json();if(!r.ok)throw new Error(d.error||'No se pudo completar la operación');return d;};
+  const toast=m=>{const n=q('#toast');n.textContent=m;n.classList.add('show');setTimeout(()=>n.classList.remove('show'),2600);};
+  const date=v=>{if(!v)return 'Sin fecha';const[y,m,d]=v.split('-');return`${d}/${m}/${y}`;};
+  const byName=(a,b)=>a.name.localeCompare(b.name,'es',{sensitivity:'base'});
 
-  async function loadMachinery() {
-    try {
-      const [meData,userData,machineData,taskData]=await Promise.all([mRequest('/api/me'),mRequest('/api/users'),mRequest('/api/machines'),mRequest('/api/machine-tasks')]);
-      machineMe=meData.user;machineUsers=userData.users.sort((a,b)=>a.name.localeCompare(b.name,'es',{sensitivity:'base'}));machines=machineData.machines.sort((a,b)=>a.name.localeCompare(b.name,'es',{sensitivity:'base'}));machineTasks=taskData.machineTasks;
-      q('#newMachine').classList.toggle('hidden',machineMe.role!=='admin');
-      renderMachines();fillOptions();
-    } catch(error){mToast(error.message);}
-  }
+  async function loadMachinery(){try{const[meData,userData,machineData,taskData]=await Promise.all([api('/api/me'),api('/api/users'),api('/api/machines'),api('/api/machine-tasks')]);machineMe=meData.user;machineUsers=userData.users.sort(byName);machines=machineData.machines.sort(byName);machineTasks=taskData.machineTasks;renderIndex();if(selectedMachineId&&machines.some(x=>x.id===selectedMachineId)){showDetail();renderDetail(selectedMachineId);}else showIndex();fillResponsibleOptions();}catch(error){toast(error.message);}}
   window.loadMachinery=loadMachinery;
 
-  function fillOptions(){
-    const users=machineUsers.filter(user=>user.active).map(user=>`<option value="${user.id}">${esc(user.name)}</option>`).join('');
-    q('#machineForm select[name="responsibleId"]').innerHTML='<option value="">Selecciona un empleado</option>'+users;
-    q('#machineTaskForm select[name="machineId"]').innerHTML='<option value="">Selecciona una maquinaria</option>'+machines.map(machine=>`<option value="${machine.id}">${esc(machine.name)} — ${esc(machine.responsibleName)}</option>`).join('');
+  function renderIndex(){
+    const rows=machines.map(machine=>`<tr><td><button class="machine-link" data-id="${machine.id}">${esc(machine.name)}</button></td><td>${machineMe.role==='admin'?`<button class="edit-machine" data-id="${machine.id}">Modificar</button> <button class="delete-machine danger" data-id="${machine.id}">Eliminar</button>`:'—'}</td></tr>`).join('');
+    const add=machineMe.role==='admin'?'<tr class="add-machine-row"><td colspan="2"><button id="newMachine" type="button">＋ Agregar nueva maquinaria</button></td></tr>':'';
+    q('#machineList').innerHTML=`<div class="machine-index-wrap"><table class="machine-index-table"><thead><tr><th>Nombre del equipo</th><th>Acciones</th></tr></thead><tbody>${rows||'<tr><td colspan="2" class="machine-empty">No hay maquinarias registradas.</td></tr>'}${add}</tbody></table></div>`;
+    qa('.machine-link').forEach(b=>b.addEventListener('click',()=>openDetail(b.dataset.id)));qa('.edit-machine').forEach(b=>b.addEventListener('click',()=>openMachine(b.dataset.id)));qa('.delete-machine').forEach(b=>b.addEventListener('click',()=>deleteMachine(b.dataset.id)));q('#newMachine')?.addEventListener('click',()=>openMachine());
   }
 
-  function renderMachines(){
-    q('#machineList').innerHTML=machines.length?machines.map(machineCard).join(''):'<div class="machine-empty">Todavía no hay maquinarias registradas.</div>';
-    qa('.edit-machine').forEach(button=>button.addEventListener('click',()=>openMachine(button.dataset.id)));
-    qa('.delete-machine').forEach(button=>button.addEventListener('click',()=>deleteMachine(button.dataset.id)));
-    qa('.machine-status').forEach(select=>select.addEventListener('change',updateMachineStatus));
-    qa('.machine-ack').forEach(button=>button.addEventListener('click',()=>acknowledgeMachineTask(button.dataset.id)));
-    qa('.machine-note').forEach(button=>button.addEventListener('click',()=>openMachineNote(button.dataset.id)));
+  function openDetail(id){selectedMachineId=id;showDetail();renderDetail(id);}
+  function showIndex(){q('#machineIndex').classList.remove('hidden');q('#machineDetail').classList.add('hidden');}
+  function showDetail(){q('#machineIndex').classList.add('hidden');q('#machineDetail').classList.remove('hidden');}
+  function renderDetail(id){
+    const machine=machines.find(x=>x.id===id);if(!machine)return showIndex();const tasks=machineTasks.filter(x=>x.machineId===id);
+    q('#machineDetail').innerHTML=`<div class="machine-detail-head"><div><button id="backMachines" class="back-machines" type="button">← Maquinarias</button><h2>${esc(machine.name)}</h2><p>Responsable: <strong>${esc(machine.responsibleName)}</strong></p></div><button id="addMachineTask" class="primary" type="button">＋ Agregar tarea</button></div><div class="machine-table-wrap">${tasks.length?`<table class="machine-table"><thead><tr><th>Tarea</th><th>Descripción</th><th>Creada por</th><th>Terminación</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>${tasks.map(taskRow).join('')}</tbody></table>`:'<div class="machine-empty">Esta maquinaria todavía no tiene tareas.</div>'}</div>`;
+    q('#backMachines').addEventListener('click',()=>{selectedMachineId=null;showIndex();});q('#addMachineTask').addEventListener('click',()=>openTask('',id));qa('.finish-machine-task').forEach(b=>b.addEventListener('click',()=>finishTask(b.dataset.id)));qa('.edit-machine-task').forEach(b=>b.addEventListener('click',()=>openTask(b.dataset.id,id)));qa('.machine-note').forEach(b=>b.addEventListener('click',()=>openNote(b.dataset.id)));
   }
 
-  function machineCard(machine){
-    const rows=machineTasks.filter(task=>task.machineId===machine.id);
-    const actions=machineMe.role==='admin'?`<div class="machine-actions"><button class="edit-machine" data-id="${machine.id}">Editar</button><button class="delete-machine danger" data-id="${machine.id}">Eliminar</button></div>`:'';
-    return `<article class="machine-card"><div class="machine-card-head"><div><h3>${esc(machine.name)}</h3><p>Responsable: <strong>${esc(machine.responsibleName)}</strong> · ${rows.length} tarea${rows.length===1?'':'s'}</p></div>${actions}</div><div class="machine-table-wrap">${rows.length?`<table class="machine-table"><thead><tr><th>Tarea</th><th>Descripción</th><th>Creada por</th><th>Terminación</th><th>Estado</th><th>Lectura</th><th>Acciones</th></tr></thead><tbody>${rows.map(machineTaskRow).join('')}</tbody></table>`:'<div class="machine-empty">Esta maquinaria no tiene tareas.</div>'}</div></article>`;
+  function taskRow(task){
+    const latest=(task.notes||[]).length?task.notes[task.notes.length-1].text:task.description||'Sin descripción',history=[task.description,...(task.notes||[]).map(n=>n.text)].filter(Boolean).join('\n\n'),canEdit=task.creatorId===machineMe.id||machineMe.role==='admin',canNote=task.creatorId===machineMe.id||task.assigneeId===machineMe.id;
+    const finish=task.progress===100?'<span class="finished-label">Finalizada</span>':task.assigneeId===machineMe.id?`<button class="finish-machine-task" data-id="${task.id}">Finalizar</button>`:'Pendiente';
+    return `<tr class="${task.progress===100?'machine-task-done':''}"><td><strong>${esc(task.title)}</strong></td><td class="machine-description"><details><summary>${esc(latest)}</summary><div class="history">${esc(history)}</div></details></td><td>${esc(task.creatorName)}</td><td>${date(task.dueDate)}</td><td>${finish}</td><td class="machine-task-actions">${canEdit&&task.progress!==100?`<button class="edit-machine-task" data-id="${task.id}">Modificar</button>`:''}${canNote&&task.progress!==100?`<button class="machine-note" data-id="${task.id}">Comentar</button>`:''}</td></tr>`;
   }
 
-  function machineTaskRow(task){
-    const latest=(task.notes||[]).length?task.notes[task.notes.length-1].text:task.description||'Sin descripción';
-    const history=[task.description,...(task.notes||[]).map(note=>note.text)].filter(Boolean).map((text,index)=>`${index?`Observación ${index}`:'Descripción inicial'}: ${text}`).join('\n\n');
-    const status=task.assigneeId===machineMe.id?`<select class="machine-status" data-id="${task.id}">${statusOptions(task)}</select>`:`${task.progress===100?'Finalizada':task.progress+'%'}`;
-    const reading=task.acknowledgedAt?'✓ Leída':task.assigneeId===machineMe.id?`<button class="machine-ack" data-id="${task.id}">Confirmar</button>`:'Pendiente';
-    const canNote=task.creatorId===machineMe.id||task.assigneeId===machineMe.id;
-    return `<tr class="${task.progress===100?'machine-task-done':''}"><td><strong>${esc(task.title)}</strong></td><td class="machine-description"><details><summary>${esc(latest)}</summary><div class="history">${esc(history)}</div></details></td><td>${esc(task.creatorName)}</td><td>${date(task.dueDate)}</td><td>${status}</td><td class="machine-read">${reading}</td><td class="machine-task-actions">${canNote?`<button class="machine-note" data-id="${task.id}">Comentar</button>`:'—'}</td></tr>`;
-  }
+  function fillResponsibleOptions(){q('#machineForm select[name="responsibleId"]').innerHTML='<option value="">Selecciona un empleado</option>'+machineUsers.filter(x=>x.active).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('');}
+  function openMachine(id=''){const f=q('#machineForm');f.reset();f.elements.id.value=id;f.querySelector('.formMessage').textContent='';if(id){const m=machines.find(x=>x.id===id);f.elements.name.value=m.name;f.elements.responsibleId.value=m.responsibleId;}q('#machineModal').classList.remove('hidden');}
+  function openTask(id='',machineId=selectedMachineId){const f=q('#machineTaskForm');f.reset();f.elements.id.value=id;f.elements.machineId.value=machineId;f.querySelector('.formMessage').textContent='';q('#machineTaskModalTitle').textContent=id?'Modificar tarea de maquinaria':'Nueva tarea de maquinaria';if(id){const t=machineTasks.find(x=>x.id===id);f.elements.title.value=t.title;f.elements.description.value=t.description||'';f.elements.dueDate.value=t.dueDate;}q('#machineTaskModal').classList.remove('hidden');}
+  function openNote(id){const f=q('#machineNoteForm');f.reset();f.elements.id.value=id;f.querySelector('.formMessage').textContent='';q('#machineNoteModal').classList.remove('hidden');}
+  const close=id=>q('#'+id).classList.add('hidden');
 
-  function openMachine(id='') { const form=q('#machineForm');form.reset();form.elements.id.value=id;if(id){const machine=machines.find(item=>item.id===id);form.elements.name.value=machine.name;form.elements.responsibleId.value=machine.responsibleId;}q('#machineModal').classList.remove('hidden'); }
-  function openMachineTask(){if(!machines.length)return mToast('El ADMIN debe registrar primero una maquinaria');q('#machineTaskForm').reset();q('#machineTaskModal').classList.remove('hidden');}
-  function openMachineNote(id){const form=q('#machineNoteForm');form.reset();form.elements.id.value=id;q('#machineNoteModal').classList.remove('hidden');}
-  function close(id){q('#'+id).classList.add('hidden');}
+  async function deleteMachine(id){const m=machines.find(x=>x.id===id);if(!confirm(`¿Eliminar ${m.name} y todas sus tareas?`))return;try{await api(`/api/machines/${id}`,{method:'DELETE'});selectedMachineId=null;await loadMachinery();toast('Maquinaria eliminada');}catch(error){toast(error.message);}}
+  async function finishTask(id){if(!confirm('¿Confirmas que esta tarea fue finalizada?'))return;try{await api(`/api/machine-tasks/${id}/status`,{method:'PATCH',body:JSON.stringify({progress:100})});await loadMachinery();toast('Tarea finalizada');}catch(error){toast(error.message);}}
 
-  async function deleteMachine(id){const machine=machines.find(item=>item.id===id);if(!confirm(`¿Eliminar ${machine.name} y todas sus tareas de maquinaria?`))return;try{await mRequest(`/api/machines/${id}`,{method:'DELETE'});await loadMachinery();mToast('Maquinaria eliminada');}catch(error){mToast(error.message);}}
-  async function acknowledgeMachineTask(eventId){try{await mRequest(`/api/machine-tasks/${eventId}/acknowledge`,{method:'POST'});await loadMachinery();mToast('Lectura confirmada');}catch(error){mToast(error.message);}}
-  async function updateMachineStatus(event){try{await mRequest(`/api/machine-tasks/${event.target.dataset.id}/status`,{method:'PATCH',body:JSON.stringify({progress:Number(event.target.value)})});await loadMachinery();mToast('Estado actualizado');}catch(error){mToast(error.message);await loadMachinery();}}
-
-  q('#newMachine').addEventListener('click',()=>openMachine());q('#newMachineTask').addEventListener('click',openMachineTask);
-  qa('[data-close]').forEach(button=>button.addEventListener('click',()=>close(button.dataset.close)));
-  q('#machineForm').addEventListener('submit',async event=>{event.preventDefault();const form=event.target,id=form.elements.id.value,payload={name:form.elements.name.value,responsibleId:form.elements.responsibleId.value};try{await mRequest(id?`/api/machines/${id}`:'/api/machines',{method:id?'PATCH':'POST',body:JSON.stringify(payload)});close('machineModal');await loadMachinery();mToast(id?'Maquinaria actualizada':'Maquinaria creada');}catch(error){form.querySelector('.formMessage').textContent=error.message;}});
-  q('#machineTaskForm').addEventListener('submit',async event=>{event.preventDefault();const form=event.target;try{await mRequest('/api/machine-tasks',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(form)))});close('machineTaskModal');await loadMachinery();mToast('Tarea de maquinaria creada');}catch(error){form.querySelector('.formMessage').textContent=error.message;}});
-  q('#machineNoteForm').addEventListener('submit',async event=>{event.preventDefault();const form=event.target,id=form.elements.id.value;try{await mRequest(`/api/machine-tasks/${id}/notes`,{method:'POST',body:JSON.stringify({text:form.elements.text.value})});close('machineNoteModal');await loadMachinery();mToast('Observación agregada');}catch(error){form.querySelector('.formMessage').textContent=error.message;}});
+  qa('[data-close]').forEach(b=>b.addEventListener('click',()=>close(b.dataset.close)));
+  q('#machineForm').addEventListener('submit',async e=>{e.preventDefault();const f=e.target,id=f.elements.id.value;try{await api(id?`/api/machines/${id}`:'/api/machines',{method:id?'PATCH':'POST',body:JSON.stringify({name:f.elements.name.value,responsibleId:f.elements.responsibleId.value})});close('machineModal');await loadMachinery();toast(id?'Maquinaria modificada':'Maquinaria agregada');}catch(error){f.querySelector('.formMessage').textContent=error.message;}});
+  q('#machineTaskForm').addEventListener('submit',async e=>{e.preventDefault();const f=e.target,id=f.elements.id.value,payload={machineId:f.elements.machineId.value,title:f.elements.title.value,description:f.elements.description.value,dueDate:f.elements.dueDate.value};try{await api(id?`/api/machine-tasks/${id}`:'/api/machine-tasks',{method:id?'PATCH':'POST',body:JSON.stringify(payload)});close('machineTaskModal');await loadMachinery();toast(id?'Tarea modificada':'Tarea agregada');}catch(error){f.querySelector('.formMessage').textContent=error.message;}});
+  q('#machineNoteForm').addEventListener('submit',async e=>{e.preventDefault();const f=e.target;try{await api(`/api/machine-tasks/${f.elements.id.value}/notes`,{method:'POST',body:JSON.stringify({text:f.elements.text.value})});close('machineNoteModal');await loadMachinery();toast('Observación agregada');}catch(error){f.querySelector('.formMessage').textContent=error.message;}});
 })();
