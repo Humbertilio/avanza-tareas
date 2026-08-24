@@ -28,7 +28,7 @@ async function enterApp() {
   $('#loginView').classList.add('hidden'); $('#appView').classList.remove('hidden');
   $('#profileName').textContent = me.name; $('#profileRole').textContent = me.role === 'admin' ? 'Administrador' : 'Empleado'; $('#avatar').textContent = initials(me.name);
   if (me.role === 'admin') $('#usersNav').classList.remove('hidden');
-  await refresh();
+  await refresh(); history.replaceState({ view: 'tasks' }, '', '#tasks'); showView('tasks', false);
 }
 async function refresh() {
   [users, tasks] = await Promise.all([request('/api/users').then(x => x.users), request('/api/tasks').then(x => x.tasks)]);
@@ -87,7 +87,7 @@ function openDescription(id) { const task=tasks.find(item=>item.id===id);if(!tas
 function closeDescription() { $('#descriptionModal').classList.add('hidden'); }
 async function acknowledgeTask(id) { try { await request(`/api/tasks/${id}/acknowledge`,{method:'POST'});await refresh();toast('Lectura confirmada'); } catch(error){toast(error.message);} }
 async function updateStatus(event) { try { await request(`/api/tasks/${event.target.dataset.id}/status`, { method: 'PATCH', body: JSON.stringify({ progress: Number(event.target.value) }) }); await refresh(); toast('Estado actualizado'); } catch (error) { toast(error.message); await refresh(); } }
-function showView(name) { ['tasks','all','new','machines','users'].forEach(x => $(`#${x}View`).classList.toggle('hidden', x !== name)); $$('.nav').forEach(x => x.classList.toggle('active', x.dataset.view === name)); $('#greeting').textContent = name === 'tasks' ? 'Tus tareas' : name === 'all' ? 'Todas las tareas' : name === 'new' ? 'Crear una tarea' : name === 'machines' ? 'Maquinarias' : 'Gestión del equipo'; if(name==='machines') window.loadMachinery?.(); }
+function showView(name, addHistory = true) { ['tasks','all','new','machines','users'].forEach(x => $(`#${x}View`).classList.toggle('hidden', x !== name)); $$('.nav').forEach(x => x.classList.toggle('active', x.dataset.view === name)); $('#greeting').textContent = name === 'tasks' ? 'Tus tareas' : name === 'all' ? 'Todas las tareas' : name === 'new' ? 'Crear una tarea' : name === 'machines' ? 'Maquinarias' : 'Gestión del equipo'; const sameScreen=history.state?.view===name&&!history.state?.machineId;if(addHistory&&!sameScreen)history.pushState({view:name},'',`#${name}`);if(name==='machines')window.loadMachinery?.(); }
 function closeInstall() { $('#installModal').classList.add('hidden'); }
 function showDeviceInstructions(device) {
   const target=$('#deviceInstructions'); $$('.device-options button').forEach(button=>button.classList.toggle('active',button.dataset.device===device));
@@ -114,4 +114,5 @@ $('#closeNote').addEventListener('click',closeNote);$('#cancelNote').addEventLis
 $('#closeDescription').addEventListener('click',closeDescription);$('#descriptionModal').addEventListener('click',event=>{if(event.target===$('#descriptionModal'))closeDescription();});
 $('#noteForm').addEventListener('submit',async event=>{event.preventDefault();const form=event.target,msg=form.querySelector('.formMessage'),id=form.elements.id.value;msg.textContent='';try{await request(`/api/tasks/${id}/notes`,{method:'POST',body:JSON.stringify({text:form.elements.text.value})});closeNote();await refresh();toast('Anotación agregada');}catch(error){msg.textContent=error.message;}});
 $('#enableNotifications').addEventListener('click',enableNotifications);
+window.addEventListener('popstate', event => { if (!me) return; const state = event.state || { view: 'tasks' }; showView(state.view || 'tasks', false); if (state.view === 'machines') setTimeout(() => window.openMachineFromHistory?.(state.machineId || null), 0); });
 boot();
