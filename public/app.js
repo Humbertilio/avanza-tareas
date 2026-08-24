@@ -32,6 +32,7 @@ async function enterApp() {
 }
 async function refresh() {
   [users, tasks] = await Promise.all([request('/api/users').then(x => x.users), request('/api/tasks').then(x => x.tasks)]);
+  users.sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
   const assigneeOptions = '<option value="">Selecciona un empleado</option>' + users.filter(x => x.active).map(x => `<option value="${x.id}">${escapeHtml(x.name)}</option>`).join('');
   $('#assigneeSelect').innerHTML = assigneeOptions; $('#editAssigneeSelect').innerHTML = assigneeOptions;
   renderTasks(); renderUsers();

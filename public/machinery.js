@@ -11,7 +11,7 @@
   async function loadMachinery() {
     try {
       const [meData,userData,machineData,taskData]=await Promise.all([mRequest('/api/me'),mRequest('/api/users'),mRequest('/api/machines'),mRequest('/api/machine-tasks')]);
-      machineMe=meData.user;machineUsers=userData.users;machines=machineData.machines;machineTasks=taskData.machineTasks;
+      machineMe=meData.user;machineUsers=userData.users.sort((a,b)=>a.name.localeCompare(b.name,'es',{sensitivity:'base'}));machines=machineData.machines.sort((a,b)=>a.name.localeCompare(b.name,'es',{sensitivity:'base'}));machineTasks=taskData.machineTasks;
       q('#newMachine').classList.toggle('hidden',machineMe.role!=='admin');
       renderMachines();fillOptions();
     } catch(error){mToast(error.message);}

@@ -184,7 +184,7 @@ async function api(req, res, url) {
 
   if (req.method === 'GET' && url.pathname === '/api/users') {
     const allUsers = readDb().users;
-    return json(res, 200, { users: (user.role === 'admin' ? allUsers : allUsers.filter(item => item.active)).map(publicUser) });
+    return json(res, 200, { users: (user.role === 'admin' ? allUsers : allUsers.filter(item => item.active)).map(publicUser).sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' })) });
   }
 
   if (req.method === 'POST' && url.pathname === '/api/users') {
@@ -327,7 +327,7 @@ async function api(req, res, url) {
     const machines = (db.machines || []).map(machine => ({
       ...machine,
       responsibleName: db.users.find(item => item.id === machine.responsibleId)?.name || 'Usuario eliminado'
-    })).sort((a, b) => a.name.localeCompare(b.name));
+    })).sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
     return json(res, 200, { machines });
   }
 
