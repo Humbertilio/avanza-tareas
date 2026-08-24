@@ -37,7 +37,9 @@ function initialDatabase() {
       active: true, salt: credentials.salt, passwordHash: credentials.hash,
       createdAt: new Date().toISOString()
     }],
-    tasks: []
+    tasks: [],
+    machines: [],
+    machineTasks: []
   };
 }
 
@@ -59,6 +61,8 @@ function configurePush() {
   const db = readDb();
   let changed = false;
   if (!Array.isArray(db.pushSubscriptions)) { db.pushSubscriptions = []; changed = true; }
+  if (!Array.isArray(db.machines)) { db.machines = []; changed = true; }
+  if (!Array.isArray(db.machineTasks)) { db.machineTasks = []; changed = true; }
   if (!db.meta.vapidKeys) { db.meta.vapidKeys = webpush.generateVAPIDKeys(); changed = true; }
   if (changed) fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
   webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:admin@avanza.local', db.meta.vapidKeys.publicKey, db.meta.vapidKeys.privateKey);
@@ -316,6 +320,101 @@ async function api(req, res, url) {
       });
       return json(res, 200, { task });
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/machines') {
+    const db = readDb();
+    const machines = (db.machines || []).map(machine => ({
+      ...machine,
+      responsibleName: db.users.find(item => item.id === machine.responsibleId)?.name || 'Usuario eliminado'
+    })).sort((a, b) => a.name.localeCompare(b.name));
+    return json(res, 200, { machines });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/machines') {
+    if (user.role !== 'admin') return json(res, 403, { error: 'Solo el administrador puede crear maquinarias' });
+    const input = await body(req), name = clean(input.name, 100), responsibleId = clean(input.responsibleId, 100);
+    if (!name || !responsibleId) return json(res, 400, { error: 'Nombre y responsable son obligatorios' });
+    try {
+      const machine = await mutateDb(db => {
+        if (!db.users.some(item => item.id === responsibleId && item.active)) throw Object.assign(new Error('El responsable no existe'), { status: 400 });
+        if ((db.machines || []).some(item => item.name.toLowerCase() === name.toLowerCase())) throw Object.assign(new Error('Ya existe una maquinaria con ese nombre'), { status: 409 });
+        const now = new Date().toISOString(), next = { id: crypto.randomUUID(), name, responsibleId, createdAt: now, updatedAt: now };
+        db.machines ||= []; db.machines.push(next); return next;
+      });
+      return json(res, 201, { machine });
+    } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
+
+  const machineMatch = url.pathname.match(/^\/api\/machines\/([^/]+)$/);
+  if (req.method === 'PATCH' && machineMatch) {
+    if (user.role !== 'admin') return json(res, 403, { error: 'Solo el administrador puede editar maquinarias' });
+    const input = await body(req), name = clean(input.name, 100), responsibleId = clean(input.responsibleId, 100), machineId = machineMatch[1];
+    if (!name || !responsibleId) return json(res, 400, { error: 'Nombre y responsable son obligatorios' });
+    try {
+      const result = await mutateDb(db => {
+        const found = (db.machines || []).find(item => item.id === machineId);
+        if (!found) throw Object.assign(new Error('Maquinaria no encontrada'), { status: 404 });
+        if (!db.users.some(item => item.id === responsibleId && item.active)) throw Object.assign(new Error('El responsable no existe'), { status: 400 });
+        if (db.machines.some(item => item.id !== machineId && item.name.toLowerCase() === name.toLowerCase())) throw Object.assign(new Error('Ya existe una maquinaria con ese nombre'), { status: 409 });
+        const changed = found.responsibleId !== responsibleId;
+        found.name = name; found.responsibleId = responsibleId; found.updatedAt = new Date().toISOString();
+        if (changed) (db.machineTasks || []).filter(task => task.machineId === machineId && task.progress < 100).forEach(task => { task.assigneeId = responsibleId; task.acknowledgedAt = null; task.updatedAt = found.updatedAt; });
+        return { machine: found, changed };
+      });
+      if (result.changed) await notifyUser(responsibleId, { title: 'Maquinaria asignada', body: `Ahora eres responsable de ${result.machine.name}`, url: '/' });
+      return json(res, 200, { machine: result.machine });
+    } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
+
+  if (req.method === 'DELETE' && machineMatch) {
+    if (user.role !== 'admin') return json(res, 403, { error: 'Solo el administrador puede eliminar maquinarias' });
+    try {
+      await mutateDb(db => {
+        const index = (db.machines || []).findIndex(item => item.id === machineMatch[1]);
+        if (index < 0) throw Object.assign(new Error('Maquinaria no encontrada'), { status: 404 });
+        db.machines.splice(index, 1); db.machineTasks = (db.machineTasks || []).filter(task => task.machineId !== machineMatch[1]);
+      });
+      return json(res, 200, { ok: true });
+    } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/machine-tasks') {
+    const db = readDb();
+    const machineTasks = (db.machineTasks || []).map(task => ({ ...task, notes: Array.isArray(task.notes) ? task.notes : [], machineName: db.machines.find(item => item.id === task.machineId)?.name || 'Maquinaria eliminada', creatorName: db.users.find(item => item.id === task.creatorId)?.name || 'Usuario eliminado', assigneeName: db.users.find(item => item.id === task.assigneeId)?.name || 'Usuario eliminado' })).sort((a,b) => b.createdAt.localeCompare(a.createdAt));
+    return json(res, 200, { machineTasks });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/machine-tasks') {
+    const input = await body(req), rawTitle = String(input.title || '').trim(), title = clean(rawTitle, 50), description = clean(input.description, 2000), machineId = clean(input.machineId, 100), dueDate = clean(input.dueDate, 10);
+    if (!title || rawTitle.length > 50 || !machineId || !validDate(dueDate)) return json(res, 400, { error: 'Maquinaria, título de hasta 50 caracteres y fecha válida son obligatorios' });
+    try {
+      const task = await mutateDb(db => {
+        const machine = (db.machines || []).find(item => item.id === machineId);
+        if (!machine) throw Object.assign(new Error('Maquinaria no encontrada'), { status: 404 });
+        if (!db.users.some(item => item.id === machine.responsibleId && item.active)) throw Object.assign(new Error('La maquinaria no tiene un responsable activo'), { status: 400 });
+        const now = new Date().toISOString(), next = { id: crypto.randomUUID(), machineId, title, description, notes: [], creatorId: user.id, assigneeId: machine.responsibleId, dueDate, progress: 0, acknowledgedAt: null, createdAt: now, updatedAt: now, completedAt: null };
+        db.machineTasks ||= []; db.machineTasks.push(next); return next;
+      });
+      await notifyUser(task.assigneeId, { title: 'Nueva tarea de maquinaria', body: `${user.name}: ${task.title}`, url: '/' });
+      return json(res, 201, { task });
+    } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
+
+  const machineTaskAction = url.pathname.match(/^\/api\/machine-tasks\/([^/]+)\/(acknowledge|status|notes)$/);
+  if (machineTaskAction && req.method === 'POST' && machineTaskAction[2] === 'acknowledge') {
+    try { const task = await mutateDb(db => { const found=(db.machineTasks||[]).find(item=>item.id===machineTaskAction[1]); if(!found)throw Object.assign(new Error('Tarea no encontrada'),{status:404}); if(found.assigneeId!==user.id)throw Object.assign(new Error('Solo el responsable puede confirmar la lectura'),{status:403}); found.acknowledgedAt ||= new Date().toISOString(); return found; }); return json(res,200,{task}); }
+    catch(error){return json(res,error.status||500,{error:error.message});}
+  }
+  if (machineTaskAction && req.method === 'PATCH' && machineTaskAction[2] === 'status') {
+    const input=await body(req),progress=Number(input.progress); if(!STATUSES.includes(progress))return json(res,400,{error:'Estado no permitido'});
+    try { const task=await mutateDb(db=>{const found=(db.machineTasks||[]).find(item=>item.id===machineTaskAction[1]);if(!found)throw Object.assign(new Error('Tarea no encontrada'),{status:404});if(found.assigneeId!==user.id)throw Object.assign(new Error('Solo el responsable puede cambiar el estado'),{status:403});found.progress=progress;found.updatedAt=new Date().toISOString();found.completedAt=progress===100?found.updatedAt:null;return found;});return json(res,200,{task}); }
+    catch(error){return json(res,error.status||500,{error:error.message});}
+  }
+  if (machineTaskAction && req.method === 'POST' && machineTaskAction[2] === 'notes') {
+    const input=await body(req),text=clean(input.text,2000);if(!text)return json(res,400,{error:'La anotación no puede estar vacía'});
+    try { const task=await mutateDb(db=>{const found=(db.machineTasks||[]).find(item=>item.id===machineTaskAction[1]);if(!found)throw Object.assign(new Error('Tarea no encontrada'),{status:404});if(found.creatorId!==user.id&&found.assigneeId!==user.id)throw Object.assign(new Error('Solo el creador o el responsable pueden agregar anotaciones'),{status:403});found.notes||=[];found.notes.push({text,createdAt:new Date().toISOString()});found.updatedAt=new Date().toISOString();return found;});return json(res,201,{task}); }
+    catch(error){return json(res,error.status||500,{error:error.message});}
   }
 
   return json(res, 404, { error: 'Ruta no encontrada' });

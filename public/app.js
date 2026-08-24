@@ -86,7 +86,7 @@ function openDescription(id) { const task=tasks.find(item=>item.id===id);if(!tas
 function closeDescription() { $('#descriptionModal').classList.add('hidden'); }
 async function acknowledgeTask(id) { try { await request(`/api/tasks/${id}/acknowledge`,{method:'POST'});await refresh();toast('Lectura confirmada'); } catch(error){toast(error.message);} }
 async function updateStatus(event) { try { await request(`/api/tasks/${event.target.dataset.id}/status`, { method: 'PATCH', body: JSON.stringify({ progress: Number(event.target.value) }) }); await refresh(); toast('Estado actualizado'); } catch (error) { toast(error.message); await refresh(); } }
-function showView(name) { ['tasks','all','new','users'].forEach(x => $(`#${x}View`).classList.toggle('hidden', x !== name)); $$('.nav').forEach(x => x.classList.toggle('active', x.dataset.view === name)); $('#greeting').textContent = name === 'tasks' ? 'Tus tareas' : name === 'all' ? 'Todas las tareas' : name === 'new' ? 'Crear una tarea' : 'Gestión del equipo'; }
+function showView(name) { ['tasks','all','new','machines','users'].forEach(x => $(`#${x}View`).classList.toggle('hidden', x !== name)); $$('.nav').forEach(x => x.classList.toggle('active', x.dataset.view === name)); $('#greeting').textContent = name === 'tasks' ? 'Tus tareas' : name === 'all' ? 'Todas las tareas' : name === 'new' ? 'Crear una tarea' : name === 'machines' ? 'Maquinarias' : 'Gestión del equipo'; if(name==='machines') window.loadMachinery?.(); }
 function closeInstall() { $('#installModal').classList.add('hidden'); }
 function showDeviceInstructions(device) {
   const target=$('#deviceInstructions'); $$('.device-options button').forEach(button=>button.classList.toggle('active',button.dataset.device===device));
