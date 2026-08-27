@@ -150,6 +150,31 @@ function publicMessage(db, message) {
   const receipts = (db.messageReceipts || []).filter(item => item.messageId === message.id);
   return { ...message, senderName: db.users.find(item => item.id === message.senderId)?.name || 'Usuario eliminado', attachments: (db.attachments || []).filter(item => item.messageId === message.id).map(publicAttachment), delivered: receipts.filter(item => item.userId !== message.senderId).every(item => item.deliveredAt), read: receipts.filter(item => item.userId !== message.senderId).every(item => item.readAt) };
 }
+async function sendDirectSystemMessage(sender, recipientId, text, notificationBody) {
+  if (!recipientId || recipientId === sender.id) return null;
+  const result = await mutateDb(db => {
+    const participantConversationIds = (db.conversationParticipants || []).filter(item => item.userId === sender.id).map(item => item.conversationId);
+    let conversation = db.conversations.find(item => item.type === 'direct' && participantConversationIds.includes(item.id) && chatUserIds(db,item.id).length === 2 && chatUserIds(db,item.id).includes(recipientId));
+    const now = new Date().toISOString();
+    if (!conversation) {
+      conversation = { id: crypto.randomUUID(), type: 'direct', title: null, createdBy: sender.id, createdAt: now, updatedAt: now, pinnedBy: [], settings: {} };
+      db.conversations.push(conversation);
+      [sender.id,recipientId].forEach(userId => db.conversationParticipants.push({ id: crypto.randomUUID(), conversationId: conversation.id, userId, role: 'member', joinedAt: now, lastReadAt: null, lastReadMessageId: null, muted: false }));
+    }
+    const message = { id: crypto.randomUUID(), conversationId: conversation.id, senderId: sender.id, type: 'text', text, replyToMessageId: null, forwardedFromMessageId: null, deletedAt: null, createdAt: now, updatedAt: now, systemType: 'task_assignment' };
+    db.messages.push(message); conversation.updatedAt = now;
+    [sender.id,recipientId].forEach(userId => db.messageReceipts.push({ id: crypto.randomUUID(), messageId: message.id, userId, deliveredAt: userId === sender.id ? now : null, readAt: userId === sender.id ? now : null }));
+    return { conversationId: conversation.id, message };
+  });
+  const db = readDb(), payload = publicMessage(db,result.message), badgeCount = db.messageReceipts.filter(receipt => receipt.userId === recipientId && !receipt.readAt).length;
+  emitChat(recipientId,'message',payload); emitChat(sender.id,'message',payload);
+  await notifyUser(recipientId,{ title: `Nueva tarea de ${sender.name}`, body: notificationBody, url: `/#chat/${result.conversationId}`, badgeCount });
+  return payload;
+}
+function assignmentMessage(task, senderName, heading = 'Nueva tarea asignada') {
+  const [year,month,day] = task.dueDate.split('-');
+  return `${heading}\n\nTarea: ${task.title}\nDescripción: ${task.description || 'Sin descripción'}\nAsignada por: ${senderName}\nFecha de finalización: ${day}/${month}/${year}`;
+}
 
 async function notifyUser(userId, payload) {
   const db = readDb(), subscriptions = (db.pushSubscriptions || []).filter(item => item.userId === userId);
@@ -359,7 +384,7 @@ async function api(req, res, url) {
         const next = { id: crypto.randomUUID(), title, description, notes: [], creatorId: user.id, assigneeId, dueDate, progress: 0, acknowledgedAt: null, createdAt: now, updatedAt: now, completedAt: null };
         db.tasks.push(next); return next;
       });
-      await notifyUser(task.assigneeId, { title: 'Nueva tarea asignada', body: `${user.name}: ${task.title}`, url: '/' });
+      await sendDirectSystemMessage(user, task.assigneeId, assignmentMessage(task,user.name), `${task.title} · Finaliza ${task.dueDate}`);
       return json(res, 201, { task });
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
   }
@@ -380,7 +405,7 @@ async function api(req, res, url) {
         if (reassigned) found.acknowledgedAt = null;
         return { task: found, reassigned };
       });
-      if (result.reassigned) await notifyUser(result.task.assigneeId, { title: 'Tarea reasignada', body: `${user.name}: ${result.task.title}`, url: '/' });
+      if (result.reassigned) await sendDirectSystemMessage(user, result.task.assigneeId, assignmentMessage(result.task,user.name,'Tarea reasignada'), `${result.task.title} · Finaliza ${result.task.dueDate}`);
       return json(res, 200, { task: result.task });
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
   }
@@ -504,7 +529,8 @@ async function api(req, res, url) {
         const now = new Date().toISOString(), next = { id: crypto.randomUUID(), machineId, title, description, notes: [], creatorId: user.id, assigneeId: machine.responsibleId, dueDate, progress: 0, acknowledgedAt: null, createdAt: now, updatedAt: now, completedAt: null };
         db.machineTasks ||= []; db.machineTasks.push(next); return next;
       });
-      await notifyUser(task.assigneeId, { title: 'Nueva tarea de maquinaria', body: `${user.name}: ${task.title}`, url: '/' });
+      const machineName=readDb().machines.find(item=>item.id===task.machineId)?.name||'Maquinaria';
+      await sendDirectSystemMessage(user,task.assigneeId,assignmentMessage(task,user.name,`Nueva tarea de maquinaria: ${machineName}`),`${machineName}: ${task.title} · Finaliza ${task.dueDate}`);
       return json(res, 201, { task });
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
   }
