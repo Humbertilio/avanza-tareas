@@ -319,7 +319,10 @@ async function api(req, res, url) {
         const conversation=db.conversations.find(item=>item.id===conversationId);if(conversation)conversation.updatedAt=now;return next;
       });
       const db=readDb(),payload=publicMessage(db,message);emitConversation(db,conversationId,'message',payload);
-      for(const recipientId of chatUserIds(db,conversationId).filter(id=>id!==user.id)) await notifyUser(recipientId,{title:user.name,body:text||`Envió ${files.length===1?'un archivo':'archivos'}`,url:'/#chat'});
+      for(const recipientId of chatUserIds(db,conversationId).filter(id=>id!==user.id)) {
+        const badgeCount=(db.messageReceipts||[]).filter(receipt=>receipt.userId===recipientId&&!receipt.readAt).length;
+        await notifyUser(recipientId,{title:user.name,body:text||`Envió ${files.length===1?'un archivo':'archivos'}`,url:'/#chat',badgeCount});
+      }
       return json(res,201,{message:payload});
     } catch(error){return json(res,error.status||500,{error:error.message});}
   }
