@@ -16,6 +16,7 @@ const TASK_RETENTION_MS = 15 * 24 * 60 * 60 * 1000;
 const STATUSES = [0, 25, 50, 75, 100];
 const ROLES = ['admin', 'employee'];
 const sessions = new Map();
+const chatStreams = new Map();
 let writeQueue = Promise.resolve();
 
 function passwordHash(password, salt = crypto.randomBytes(16).toString('hex')) {
@@ -39,7 +40,13 @@ function initialDatabase() {
     }],
     tasks: [],
     machines: [],
-    machineTasks: []
+    machineTasks: [],
+    conversations: [],
+    conversationParticipants: [],
+    messages: [],
+    attachments: [],
+    messageReceipts: [],
+    calls: []
   };
 }
 
@@ -63,6 +70,9 @@ function configurePush() {
   if (!Array.isArray(db.pushSubscriptions)) { db.pushSubscriptions = []; changed = true; }
   if (!Array.isArray(db.machines)) { db.machines = []; changed = true; }
   if (!Array.isArray(db.machineTasks)) { db.machineTasks = []; changed = true; }
+  for (const collection of ['conversations', 'conversationParticipants', 'messages', 'attachments', 'messageReceipts', 'calls']) {
+    if (!Array.isArray(db[collection])) { db[collection] = []; changed = true; }
+  }
   if (!db.meta.vapidKeys) { db.meta.vapidKeys = webpush.generateVAPIDKeys(); changed = true; }
   if (changed) fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
   webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:admin@avanza.local', db.meta.vapidKeys.publicKey, db.meta.vapidKeys.privateKey);
@@ -92,7 +102,7 @@ function body(req) {
     let raw = '';
     req.on('data', chunk => {
       raw += chunk;
-      if (raw.length > 1_000_000) reject(Object.assign(new Error('Solicitud demasiado grande'), { status: 413 }));
+      if (raw.length > 12_000_000) reject(Object.assign(new Error('Solicitud demasiado grande'), { status: 413 }));
     });
     req.on('end', () => {
       try { resolve(raw ? JSON.parse(raw) : {}); }
@@ -127,6 +137,18 @@ function requireUser(req, res) {
   const user = currentUser(req);
   if (!user) json(res, 401, { error: 'Debes iniciar sesión' });
   return user;
+}
+
+function chatParticipant(db, conversationId, userId) { return (db.conversationParticipants || []).find(item => item.conversationId === conversationId && item.userId === userId); }
+function chatUserIds(db, conversationId) { return (db.conversationParticipants || []).filter(item => item.conversationId === conversationId).map(item => item.userId); }
+function emitChat(userId, event, payload) {
+  for (const res of chatStreams.get(userId) || []) res.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
+}
+function emitConversation(db, conversationId, event, payload) { chatUserIds(db, conversationId).forEach(userId => emitChat(userId, event, payload)); }
+function publicAttachment(item) { return { id: item.id, name: item.name, mimeType: item.mimeType, size: item.size, url: `/api/chat/attachments/${item.id}` }; }
+function publicMessage(db, message) {
+  const receipts = (db.messageReceipts || []).filter(item => item.messageId === message.id);
+  return { ...message, senderName: db.users.find(item => item.id === message.senderId)?.name || 'Usuario eliminado', attachments: (db.attachments || []).filter(item => item.messageId === message.id).map(publicAttachment), delivered: receipts.filter(item => item.userId !== message.senderId).every(item => item.deliveredAt), read: receipts.filter(item => item.userId !== message.senderId).every(item => item.readAt) };
 }
 
 async function notifyUser(userId, payload) {
@@ -227,6 +249,89 @@ async function api(req, res, url) {
       return json(res, 200, { user: updated });
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
   }
+
+  if (req.method === 'GET' && url.pathname === '/api/chat/events') {
+    res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
+    res.write(`event: connected\ndata: ${JSON.stringify({ ok: true })}\n\n`);
+    if (!chatStreams.has(user.id)) chatStreams.set(user.id, new Set());
+    chatStreams.get(user.id).add(res);
+    const heartbeat = setInterval(() => res.write(': keep-alive\n\n'), 25000);
+    req.on('close', () => { clearInterval(heartbeat); chatStreams.get(user.id)?.delete(res); if (!chatStreams.get(user.id)?.size) chatStreams.delete(user.id); });
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/chat/members') {
+    return json(res, 200, { members: readDb().users.filter(item => item.active && item.id !== user.id).map(publicUser).sort((a,b)=>a.name.localeCompare(b.name,'es',{sensitivity:'base'})) });
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/chat/conversations') {
+    const db = readDb(), memberships = (db.conversationParticipants || []).filter(item => item.userId === user.id);
+    const conversations = memberships.map(membership => {
+      const conversation = db.conversations.find(item => item.id === membership.conversationId);
+      if (!conversation) return null;
+      const participantIds = chatUserIds(db, conversation.id), otherId = participantIds.find(id => id !== user.id), other = db.users.find(item => item.id === otherId);
+      const messages = db.messages.filter(item => item.conversationId === conversation.id && !item.deletedAt).sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
+      const last = messages[messages.length - 1], unread = (db.messageReceipts || []).filter(item => item.userId === user.id && !item.readAt && messages.some(message => message.id === item.messageId)).length;
+      return { id: conversation.id, type: conversation.type, user: other ? publicUser(other) : { id: otherId, name: 'Usuario eliminado', username: '', role: 'employee', active: false }, lastMessage: last ? publicMessage(db,last) : null, unread, updatedAt: last?.createdAt || conversation.updatedAt || conversation.createdAt, pinned: (conversation.pinnedBy || []).includes(user.id) };
+    }).filter(Boolean).sort((a,b)=>(b.pinned-a.pinned)||b.updatedAt.localeCompare(a.updatedAt));
+    return json(res, 200, { conversations, totalUnread: conversations.reduce((sum,item)=>sum+item.unread,0) });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/chat/conversations') {
+    const input = await body(req), otherId = clean(input.userId, 100);
+    if (!otherId || otherId === user.id) return json(res, 400, { error: 'Seleccione otro usuario' });
+    try {
+      const conversation = await mutateDb(db => {
+        if (!db.users.some(item => item.id === otherId && item.active)) throw Object.assign(new Error('Usuario no encontrado'), { status: 404 });
+        const existing = db.conversations.find(item => item.type === 'direct' && chatUserIds(db,item.id).length === 2 && chatUserIds(db,item.id).includes(user.id) && chatUserIds(db,item.id).includes(otherId));
+        if (existing) return existing;
+        const now = new Date().toISOString(), next = { id: crypto.randomUUID(), type: 'direct', title: null, createdBy: user.id, createdAt: now, updatedAt: now, pinnedBy: [], settings: {} };
+        db.conversations.push(next);
+        [user.id,otherId].forEach(userId => db.conversationParticipants.push({ id: crypto.randomUUID(), conversationId: next.id, userId, role: 'member', joinedAt: now, lastReadAt: null, lastReadMessageId: null, muted: false }));
+        return next;
+      });
+      emitChat(otherId, 'conversation', { conversationId: conversation.id });
+      return json(res, 201, { conversation });
+    } catch(error){ return json(res,error.status||500,{error:error.message}); }
+  }
+
+  const chatMessagesMatch = url.pathname.match(/^\/api\/chat\/conversations\/([^/]+)\/messages$/);
+  if (req.method === 'GET' && chatMessagesMatch) {
+    const db = readDb(), conversationId = chatMessagesMatch[1];
+    if (!chatParticipant(db,conversationId,user.id)) return json(res,403,{error:'No pertenece a esta conversación'});
+    const now = new Date().toISOString(), changed = [];
+    await mutateDb(data => { (data.messageReceipts || []).filter(item => item.userId === user.id && !item.deliveredAt && data.messages.some(message => message.id === item.messageId && message.conversationId === conversationId)).forEach(item => { item.deliveredAt=now; changed.push(item.messageId); }); });
+    const fresh = readDb(); changed.forEach(messageId => emitConversation(fresh,conversationId,'receipt',{conversationId,messageId,status:'delivered'}));
+    return json(res,200,{messages:fresh.messages.filter(item=>item.conversationId===conversationId&&!item.deletedAt).sort((a,b)=>a.createdAt.localeCompare(b.createdAt)).map(item=>publicMessage(fresh,item))});
+  }
+
+  if (req.method === 'POST' && chatMessagesMatch) {
+    const input = await body(req), conversationId = chatMessagesMatch[1], text = clean(input.text, 5000), files = Array.isArray(input.attachments) ? input.attachments.slice(0,3) : [];
+    if (!text && !files.length) return json(res,400,{error:'Escriba un mensaje o seleccione un archivo'});
+    try {
+      const message = await mutateDb(db => {
+        if (!chatParticipant(db,conversationId,user.id)) throw Object.assign(new Error('No pertenece a esta conversación'),{status:403});
+        let totalSize=0; const prepared=files.map(file=>{const name=clean(file.name,180),mimeType=clean(file.mimeType,100)||'application/octet-stream',data=String(file.data||''),match=data.match(/^data:[^;]+;base64,(.+)$/);if(!name||!match)throw Object.assign(new Error('Archivo no válido'),{status:400});const size=Buffer.byteLength(match[1],'base64');totalSize+=size;if(size>5_000_000)throw Object.assign(new Error('Cada archivo debe pesar menos de 5 MB'),{status:413});return{name,mimeType,size,data:match[1]};});
+        if(totalSize>8_000_000)throw Object.assign(new Error('Los archivos no pueden superar 8 MB en total'),{status:413});
+        const now=new Date().toISOString(),next={id:crypto.randomUUID(),conversationId,senderId:user.id,type:text&&prepared.length?'mixed':prepared.length?'file':'text',text,replyToMessageId:null,forwardedFromMessageId:null,deletedAt:null,createdAt:now,updatedAt:now};db.messages.push(next);
+        prepared.forEach(file=>db.attachments.push({id:crypto.randomUUID(),messageId:next.id,conversationId,...file,createdAt:now}));
+        chatUserIds(db,conversationId).forEach(userId=>db.messageReceipts.push({id:crypto.randomUUID(),messageId:next.id,userId,deliveredAt:userId===user.id?now:null,readAt:userId===user.id?now:null}));
+        const conversation=db.conversations.find(item=>item.id===conversationId);if(conversation)conversation.updatedAt=now;return next;
+      });
+      const db=readDb(),payload=publicMessage(db,message);emitConversation(db,conversationId,'message',payload);
+      for(const recipientId of chatUserIds(db,conversationId).filter(id=>id!==user.id)) await notifyUser(recipientId,{title:user.name,body:text||`Envió ${files.length===1?'un archivo':'archivos'}`,url:'/#chat'});
+      return json(res,201,{message:payload});
+    } catch(error){return json(res,error.status||500,{error:error.message});}
+  }
+
+  const chatReadMatch=url.pathname.match(/^\/api\/chat\/conversations\/([^/]+)\/read$/);
+  if(req.method==='POST'&&chatReadMatch){const conversationId=chatReadMatch[1];try{const messageIds=await mutateDb(db=>{const participant=chatParticipant(db,conversationId,user.id);if(!participant)throw Object.assign(new Error('No pertenece a esta conversación'),{status:403});const ids=db.messages.filter(item=>item.conversationId===conversationId).map(item=>item.id),changed=[],now=new Date().toISOString();db.messageReceipts.filter(item=>item.userId===user.id&&ids.includes(item.messageId)&&!item.readAt).forEach(item=>{item.deliveredAt||=now;item.readAt=now;changed.push(item.messageId);});participant.lastReadAt=now;participant.lastReadMessageId=ids[ids.length-1]||null;return changed;});if(messageIds.length){const db=readDb();emitConversation(db,conversationId,'read',{conversationId,userId:user.id,messageIds});}return json(res,200,{ok:true});}catch(error){return json(res,error.status||500,{error:error.message});}}
+
+  const chatTypingMatch=url.pathname.match(/^\/api\/chat\/conversations\/([^/]+)\/typing$/);
+  if(req.method==='POST'&&chatTypingMatch){const input=await body(req),db=readDb(),conversationId=chatTypingMatch[1];if(!chatParticipant(db,conversationId,user.id))return json(res,403,{error:'No pertenece a esta conversación'});chatUserIds(db,conversationId).filter(id=>id!==user.id).forEach(id=>emitChat(id,'typing',{conversationId,userId:user.id,name:user.name,typing:input.typing===true}));return json(res,200,{ok:true});}
+
+  const attachmentMatch=url.pathname.match(/^\/api\/chat\/attachments\/([^/]+)$/);
+  if(req.method==='GET'&&attachmentMatch){const db=readDb(),attachment=db.attachments.find(item=>item.id===attachmentMatch[1]);if(!attachment)return json(res,404,{error:'Archivo no encontrado'});if(!chatParticipant(db,attachment.conversationId,user.id))return json(res,403,{error:'No pertenece a esta conversación'});const file=Buffer.from(attachment.data,'base64');res.writeHead(200,{'Content-Type':attachment.mimeType,'Content-Length':file.length,'Content-Disposition':`${attachment.mimeType.startsWith('image/')?'inline':'attachment'}; filename*=UTF-8''${encodeURIComponent(attachment.name)}`,'Cache-Control':'private, max-age=3600'});return res.end(file);}
 
   if (req.method === 'GET' && url.pathname === '/api/tasks') {
     await purgeExpiredTasks();
