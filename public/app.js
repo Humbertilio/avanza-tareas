@@ -37,6 +37,7 @@ async function refresh() {
   $('#assigneeSelect').innerHTML = assigneeOptions; $('#editAssigneeSelect').innerHTML = assigneeOptions;
   renderTasks(); renderUsers();
 }
+window.refreshAvanza = refresh;
 function escapeHtml(value) { const el = document.createElement('span'); el.textContent = value || ''; return el.innerHTML; }
 function renderTasks() {
   const assigned = filteredAndSortedTasks(tasks.filter(task => task.assigneeId === me.id));
@@ -50,6 +51,8 @@ function renderTasks() {
   $$('.task-filter').forEach(control => control.addEventListener('change',()=>{taskFilters[control.dataset.filter]=control.value;renderTasks();}));
   $$('.clear-filter').forEach(button => button.addEventListener('click',()=>{button.dataset.clear.split(',').forEach(key=>taskFilters[key]='');renderTasks();}));
   $$('.edit-task').forEach(button=>button.addEventListener('click',()=>openEditTask(button.dataset.id)));
+  $$('.task-title-button').forEach(button=>button.addEventListener('click',()=>openEditTask(button.dataset.id)));
+  $$('.delete-task').forEach(button=>button.addEventListener('click',()=>deleteTask(button.dataset.id)));
   $$('.add-note').forEach(button=>button.addEventListener('click',()=>openNote(button.dataset.id)));
   $$('.description-cell').forEach(cell=>{let clickTimer;cell.addEventListener('click',()=>{if(!cell.classList.contains('can-comment'))return;clearTimeout(clickTimer);clickTimer=setTimeout(()=>openNote(cell.dataset.taskId),280);});cell.addEventListener('dblclick',event=>{event.preventDefault();clearTimeout(clickTimer);openDescription(cell.dataset.taskId);});cell.addEventListener('keydown',event=>{if((event.key==='Enter'||event.key===' ')&&cell.classList.contains('can-comment')){event.preventDefault();openNote(cell.dataset.taskId);}});});
   $$('.acknowledge-task').forEach(button=>button.addEventListener('click',()=>acknowledgeTask(button.dataset.id)));
@@ -71,10 +74,10 @@ function filteredAndSortedTasks(sourceTasks) {
 function taskRow(task) {
   const status=task.progress===100?'Finalizada':`${task.progress}%`, statusControl=task.assigneeId===me.id?`<select data-id="${task.id}" aria-label="Cambiar estado">${statusOptions(task)}</select>`:`<span class="status-pill">${status}</span>`;
   const reading=task.acknowledgedAt?`<span class="read-ok">✓ Leída<br><small>${dateTimeText(task.acknowledgedAt)}</small></span>`:task.assigneeId===me.id?`<button class="acknowledge-task" data-id="${task.id}">Confirmar lectura</button>`:'<span class="read-pending">Pendiente</span>';
-  const canNote=task.creatorId===me.id||task.assigneeId===me.id,actions=`${task.creatorId===me.id?`<button class="edit-task" data-id="${task.id}">Editar</button>`:''}`||'—';
+  const canNote=task.creatorId===me.id||task.assigneeId===me.id,canEdit=task.creatorId===me.id||me.role==='admin',actions=`${canEdit?`<button class="edit-task" data-id="${task.id}">Editar</button>`:''}${me.role==='admin'?`<button class="delete-task" data-id="${task.id}">Eliminar</button>`:''}`||'—';
   const latest=(task.notes||[]).length?task.notes[task.notes.length-1].text:task.description||'Sin descripción inicial';
   const description=`<div class="latest-note">${escapeHtml(latest)}</div>`;
-  return `<tr class="${task.progress===100?'completed-row':''}"><td><strong>${escapeHtml(task.title)}</strong></td><td class="description-cell ${canNote?'can-comment':''}" data-task-id="${task.id}" tabindex="0" role="button" title="Doble clic para ver todo">${description}</td><td>${dateText(task.createdAt)}</td><td>${escapeHtml(task.creatorName)}</td><td>${escapeHtml(task.assigneeName)}</td><td>${dueDateText(task.dueDate)}</td><td>${statusControl}</td><td>${reading}</td><td class="row-actions">${actions}</td></tr>`;
+  return `<tr class="${task.progress===100?'completed-row':''}"><td>${canEdit?`<button class="task-title-button" data-id="${task.id}" title="Modificar tarea">${escapeHtml(task.title)}</button>`:`<strong>${escapeHtml(task.title)}</strong>`}</td><td class="description-cell ${canNote?'can-comment':''}" data-task-id="${task.id}" tabindex="0" role="button" title="Doble clic para ver todo">${description}</td><td>${dateText(task.createdAt)}</td><td>${escapeHtml(task.creatorName)}</td><td>${escapeHtml(task.assigneeName)}</td><td>${dueDateText(task.dueDate)}</td><td>${statusControl}</td><td>${reading}</td><td class="row-actions">${actions}</td></tr>`;
 }
 function renderUsers() { $('#userList').innerHTML = users.map(user => `<div class="user-item ${user.active?'':'inactive'}"><div><strong>${escapeHtml(user.name)}</strong><span>@${escapeHtml(user.username)} · ${user.role === 'admin' ? 'Administrador' : 'Empleado'} · ${user.active?'Activo':'Desactivado'}</span></div>${me.role==='admin'?`<button class="edit-user" data-id="${user.id}">Editar</button>`:''}</div>`).join(''); $$('.edit-user').forEach(button=>button.addEventListener('click',()=>openEditUser(button.dataset.id))); }
 function openEditUser(id) { const user=users.find(x=>x.id===id), form=$('#editUserForm'); if(!user)return; form.elements.id.value=user.id; form.elements.name.value=user.name; form.elements.username.value=user.username; form.elements.password.value=''; form.elements.role.value=user.role; form.elements.active.checked=user.active; form.querySelector('.formMessage').textContent=''; $('#editUserModal').classList.remove('hidden'); }
@@ -87,6 +90,7 @@ function openDescription(id) { const task=tasks.find(item=>item.id===id);if(!tas
 function closeDescription() { $('#descriptionModal').classList.add('hidden'); }
 async function acknowledgeTask(id) { try { await request(`/api/tasks/${id}/acknowledge`,{method:'POST'});await refresh();toast('Lectura confirmada'); } catch(error){toast(error.message);} }
 async function updateStatus(event) { try { await request(`/api/tasks/${event.target.dataset.id}/status`, { method: 'PATCH', body: JSON.stringify({ progress: Number(event.target.value) }) }); await refresh(); toast('Estado actualizado'); } catch (error) { toast(error.message); await refresh(); } }
+async function deleteTask(id) { if(!confirm('¿Eliminar esta tarea definitivamente?'))return;try{await request(`/api/tasks/${id}`,{method:'DELETE'});await refresh();toast('Tarea eliminada');}catch(error){toast(error.message);} }
 function showView(name, addHistory = true) { ['tasks','all','new','machines','chat','users'].forEach(x => $(`#${x}View`).classList.toggle('hidden', x !== name)); $$('.nav').forEach(x => x.classList.toggle('active', x.dataset.view === name)); $('.mobile-new').classList.toggle('hidden', ['machines','chat','users'].includes(name)); $('#greeting').textContent = name === 'tasks' ? 'Tus tareas' : name === 'all' ? 'Todas las tareas' : name === 'new' ? 'Crear una tarea' : name === 'machines' ? 'Maquinarias' : name === 'chat' ? 'Chat' : 'Gestión del equipo'; const sameScreen=history.state?.view===name&&!history.state?.machineId&&!history.state?.conversationId;if(addHistory&&!sameScreen)history.pushState({view:name},'',`#${name}`);if(name==='machines')window.loadMachinery?.();if(name==='chat')window.loadChat?.(); }
 function closeInstall() { $('#installModal').classList.add('hidden'); }
 function showDeviceInstructions(device) {

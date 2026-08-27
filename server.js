@@ -150,7 +150,7 @@ function publicMessage(db, message) {
   const receipts = (db.messageReceipts || []).filter(item => item.messageId === message.id);
   return { ...message, senderName: db.users.find(item => item.id === message.senderId)?.name || 'Usuario eliminado', attachments: (db.attachments || []).filter(item => item.messageId === message.id).map(publicAttachment), delivered: receipts.filter(item => item.userId !== message.senderId).every(item => item.deliveredAt), read: receipts.filter(item => item.userId !== message.senderId).every(item => item.readAt) };
 }
-async function sendDirectSystemMessage(sender, recipientId, text, notificationBody) {
+async function sendDirectSystemMessage(sender, recipientId, text, notificationBody, metadata = {}) {
   if (!recipientId || recipientId === sender.id) return null;
   const result = await mutateDb(db => {
     const participantConversationIds = (db.conversationParticipants || []).filter(item => item.userId === sender.id).map(item => item.conversationId);
@@ -161,7 +161,7 @@ async function sendDirectSystemMessage(sender, recipientId, text, notificationBo
       db.conversations.push(conversation);
       [sender.id,recipientId].forEach(userId => db.conversationParticipants.push({ id: crypto.randomUUID(), conversationId: conversation.id, userId, role: 'member', joinedAt: now, lastReadAt: null, lastReadMessageId: null, muted: false }));
     }
-    const message = { id: crypto.randomUUID(), conversationId: conversation.id, senderId: sender.id, type: 'text', text, replyToMessageId: null, forwardedFromMessageId: null, deletedAt: null, createdAt: now, updatedAt: now, systemType: 'task_assignment' };
+    const message = { id: crypto.randomUUID(), conversationId: conversation.id, senderId: sender.id, type: 'text', text, replyToMessageId: null, forwardedFromMessageId: null, deletedAt: null, createdAt: now, updatedAt: now, systemType: metadata.systemType || 'task_assignment', relatedTaskType: metadata.relatedTaskType || null, relatedTaskId: metadata.relatedTaskId || null };
     db.messages.push(message); conversation.updatedAt = now;
     [sender.id,recipientId].forEach(userId => db.messageReceipts.push({ id: crypto.randomUUID(), messageId: message.id, userId, deliveredAt: userId === sender.id ? now : null, readAt: userId === sender.id ? now : null }));
     return { conversationId: conversation.id, message };
@@ -174,6 +174,9 @@ async function sendDirectSystemMessage(sender, recipientId, text, notificationBo
 function assignmentMessage(task, senderName, heading = 'Nueva tarea asignada') {
   const [year,month,day] = task.dueDate.split('-');
   return `${heading}\n\nTarea: ${task.title}\nDescripción: ${task.description || 'Sin descripción'}\nAsignada por: ${senderName}\nFecha de finalización: ${day}/${month}/${year}`;
+}
+function completionMessage(task, senderName, heading = 'Tarea finalizada') {
+  return `${heading}\n\nTarea: ${task.title}\nDescripción: ${task.description || 'Sin descripción'}\nFinalizada por: ${senderName}\nFecha y hora: ${new Date().toLocaleString('es')}`;
 }
 
 async function notifyUser(userId, payload) {
@@ -290,14 +293,14 @@ async function api(req, res, url) {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/chat/conversations') {
-    const db = readDb(), memberships = (db.conversationParticipants || []).filter(item => item.userId === user.id);
+    const db = readDb(), memberships = user.role === 'admin' ? db.conversations.map(conversation => ({ conversationId: conversation.id, observer: !chatParticipant(db,conversation.id,user.id) })) : (db.conversationParticipants || []).filter(item => item.userId === user.id);
     const conversations = memberships.map(membership => {
       const conversation = db.conversations.find(item => item.id === membership.conversationId);
       if (!conversation) return null;
-      const participantIds = chatUserIds(db, conversation.id), otherId = participantIds.find(id => id !== user.id), other = db.users.find(item => item.id === otherId);
+      const participantIds = chatUserIds(db, conversation.id), observer = !participantIds.includes(user.id), otherId = participantIds.find(id => id !== user.id), participantUsers = participantIds.map(id => db.users.find(item => item.id === id)).filter(Boolean), other = observer ? null : db.users.find(item => item.id === otherId), displayName = observer ? participantUsers.map(item=>item.name).join(' ↔ ') : other?.name || 'Usuario eliminado';
       const messages = db.messages.filter(item => item.conversationId === conversation.id && !item.deletedAt).sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
-      const last = messages[messages.length - 1], unread = (db.messageReceipts || []).filter(item => item.userId === user.id && !item.readAt && messages.some(message => message.id === item.messageId)).length;
-      return { id: conversation.id, type: conversation.type, user: other ? publicUser(other) : { id: otherId, name: 'Usuario eliminado', username: '', role: 'employee', active: false }, lastMessage: last ? publicMessage(db,last) : null, unread, updatedAt: last?.createdAt || conversation.updatedAt || conversation.createdAt, pinned: (conversation.pinnedBy || []).includes(user.id) };
+      const last = messages[messages.length - 1], unread = observer ? 0 : (db.messageReceipts || []).filter(item => item.userId === user.id && !item.readAt && messages.some(message => message.id === item.messageId)).length;
+      return { id: conversation.id, type: conversation.type, user: other ? publicUser(other) : { id: otherId || conversation.id, name: displayName, username: '', role: 'employee', active: true }, participants: participantUsers.map(publicUser), observer, lastMessage: last ? publicMessage(db,last) : null, unread, updatedAt: last?.createdAt || conversation.updatedAt || conversation.createdAt, pinned: (conversation.pinnedBy || []).includes(user.id) };
     }).filter(Boolean).sort((a,b)=>(b.pinned-a.pinned)||b.updatedAt.localeCompare(a.updatedAt));
     return json(res, 200, { conversations, totalUnread: conversations.reduce((sum,item)=>sum+item.unread,0) });
   }
@@ -323,9 +326,10 @@ async function api(req, res, url) {
   const chatMessagesMatch = url.pathname.match(/^\/api\/chat\/conversations\/([^/]+)\/messages$/);
   if (req.method === 'GET' && chatMessagesMatch) {
     const db = readDb(), conversationId = chatMessagesMatch[1];
-    if (!chatParticipant(db,conversationId,user.id)) return json(res,403,{error:'No pertenece a esta conversación'});
+    if (!chatParticipant(db,conversationId,user.id) && user.role !== 'admin') return json(res,403,{error:'No pertenece a esta conversación'});
+    const observing = !chatParticipant(db,conversationId,user.id);
     const now = new Date().toISOString(), changed = [];
-    await mutateDb(data => { (data.messageReceipts || []).filter(item => item.userId === user.id && !item.deliveredAt && data.messages.some(message => message.id === item.messageId && message.conversationId === conversationId)).forEach(item => { item.deliveredAt=now; changed.push(item.messageId); }); });
+    if(!observing)await mutateDb(data => { (data.messageReceipts || []).filter(item => item.userId === user.id && !item.deliveredAt && data.messages.some(message => message.id === item.messageId && message.conversationId === conversationId)).forEach(item => { item.deliveredAt=now; changed.push(item.messageId); }); });
     const fresh = readDb(); changed.forEach(messageId => emitConversation(fresh,conversationId,'receipt',{conversationId,messageId,status:'delivered'}));
     return json(res,200,{messages:fresh.messages.filter(item=>item.conversationId===conversationId&&!item.deletedAt).sort((a,b)=>a.createdAt.localeCompare(b.createdAt)).map(item=>publicMessage(fresh,item))});
   }
@@ -353,13 +357,13 @@ async function api(req, res, url) {
   }
 
   const chatReadMatch=url.pathname.match(/^\/api\/chat\/conversations\/([^/]+)\/read$/);
-  if(req.method==='POST'&&chatReadMatch){const conversationId=chatReadMatch[1];try{const messageIds=await mutateDb(db=>{const participant=chatParticipant(db,conversationId,user.id);if(!participant)throw Object.assign(new Error('No pertenece a esta conversación'),{status:403});const ids=db.messages.filter(item=>item.conversationId===conversationId).map(item=>item.id),changed=[],now=new Date().toISOString();db.messageReceipts.filter(item=>item.userId===user.id&&ids.includes(item.messageId)&&!item.readAt).forEach(item=>{item.deliveredAt||=now;item.readAt=now;changed.push(item.messageId);});participant.lastReadAt=now;participant.lastReadMessageId=ids[ids.length-1]||null;return changed;});if(messageIds.length){const db=readDb();emitConversation(db,conversationId,'read',{conversationId,userId:user.id,messageIds});}return json(res,200,{ok:true});}catch(error){return json(res,error.status||500,{error:error.message});}}
+  if(req.method==='POST'&&chatReadMatch){const conversationId=chatReadMatch[1];try{const result=await mutateDb(db=>{const participant=chatParticipant(db,conversationId,user.id);if(!participant)throw Object.assign(new Error('No pertenece a esta conversación'),{status:403});const ids=db.messages.filter(item=>item.conversationId===conversationId).map(item=>item.id),changed=[],deletedTasks=[],now=new Date().toISOString();db.messageReceipts.filter(item=>item.userId===user.id&&ids.includes(item.messageId)&&!item.readAt).forEach(item=>{item.deliveredAt||=now;item.readAt=now;changed.push(item.messageId);const message=db.messages.find(entry=>entry.id===item.messageId);if(message?.systemType==='task_completed'&&message.relatedTaskId){if(message.relatedTaskType==='employee'){const before=db.tasks.length;db.tasks=db.tasks.filter(task=>task.id!==message.relatedTaskId);if(db.tasks.length<before)deletedTasks.push({type:'employee',id:message.relatedTaskId});}if(message.relatedTaskType==='machine'){const before=(db.machineTasks||[]).length;db.machineTasks=(db.machineTasks||[]).filter(task=>task.id!==message.relatedTaskId);if(db.machineTasks.length<before)deletedTasks.push({type:'machine',id:message.relatedTaskId});}}});participant.lastReadAt=now;participant.lastReadMessageId=ids[ids.length-1]||null;return{messageIds:changed,deletedTasks};});if(result.messageIds.length){const db=readDb();emitConversation(db,conversationId,'read',{conversationId,userId:user.id,messageIds:result.messageIds});}return json(res,200,{ok:true,deletedTasks:result.deletedTasks});}catch(error){return json(res,error.status||500,{error:error.message});}}
 
   const chatTypingMatch=url.pathname.match(/^\/api\/chat\/conversations\/([^/]+)\/typing$/);
   if(req.method==='POST'&&chatTypingMatch){const input=await body(req),db=readDb(),conversationId=chatTypingMatch[1];if(!chatParticipant(db,conversationId,user.id))return json(res,403,{error:'No pertenece a esta conversación'});chatUserIds(db,conversationId).filter(id=>id!==user.id).forEach(id=>emitChat(id,'typing',{conversationId,userId:user.id,name:user.name,typing:input.typing===true}));return json(res,200,{ok:true});}
 
   const attachmentMatch=url.pathname.match(/^\/api\/chat\/attachments\/([^/]+)$/);
-  if(req.method==='GET'&&attachmentMatch){const db=readDb(),attachment=db.attachments.find(item=>item.id===attachmentMatch[1]);if(!attachment)return json(res,404,{error:'Archivo no encontrado'});if(!chatParticipant(db,attachment.conversationId,user.id))return json(res,403,{error:'No pertenece a esta conversación'});const file=Buffer.from(attachment.data,'base64');res.writeHead(200,{'Content-Type':attachment.mimeType,'Content-Length':file.length,'Content-Disposition':`${attachment.mimeType.startsWith('image/')?'inline':'attachment'}; filename*=UTF-8''${encodeURIComponent(attachment.name)}`,'Cache-Control':'private, max-age=3600'});return res.end(file);}
+  if(req.method==='GET'&&attachmentMatch){const db=readDb(),attachment=db.attachments.find(item=>item.id===attachmentMatch[1]);if(!attachment)return json(res,404,{error:'Archivo no encontrado'});if(!chatParticipant(db,attachment.conversationId,user.id)&&user.role!=='admin')return json(res,403,{error:'No pertenece a esta conversación'});const file=Buffer.from(attachment.data,'base64');res.writeHead(200,{'Content-Type':attachment.mimeType,'Content-Length':file.length,'Content-Disposition':`${attachment.mimeType.startsWith('image/')?'inline':'attachment'}; filename*=UTF-8''${encodeURIComponent(attachment.name)}`,'Cache-Control':'private, max-age=3600'});return res.end(file);}
 
   if (req.method === 'GET' && url.pathname === '/api/tasks') {
     await purgeExpiredTasks();
@@ -398,7 +402,7 @@ async function api(req, res, url) {
       const result = await mutateDb(db => {
         const found = db.tasks.find(item => item.id === taskId);
         if (!found) throw Object.assign(new Error('Tarea no encontrada'), { status: 404 });
-        if (found.creatorId !== user.id) throw Object.assign(new Error('Solo quien creó la tarea puede editarla'), { status: 403 });
+        if (found.creatorId !== user.id && user.role !== 'admin') throw Object.assign(new Error('Solo quien creó la tarea o el administrador pueden editarla'), { status: 403 });
         if (!db.users.some(item => item.id === assigneeId && item.active)) throw Object.assign(new Error('El empleado asignado no existe'), { status: 400 });
         const reassigned = found.assigneeId !== assigneeId;
         found.title = title; found.assigneeId = assigneeId; found.dueDate = dueDate; found.updatedAt = new Date().toISOString();
@@ -408,6 +412,12 @@ async function api(req, res, url) {
       if (result.reassigned) await sendDirectSystemMessage(user, result.task.assigneeId, assignmentMessage(result.task,user.name,'Tarea reasignada'), `${result.task.title} · Finaliza ${result.task.dueDate}`);
       return json(res, 200, { task: result.task });
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
+
+  if (req.method === 'DELETE' && taskMatch) {
+    if (user.role !== 'admin') return json(res,403,{error:'Solo el administrador puede eliminar tareas'});
+    try { await mutateDb(db=>{const index=db.tasks.findIndex(item=>item.id===taskMatch[1]);if(index<0)throw Object.assign(new Error('Tarea no encontrada'),{status:404});db.tasks.splice(index,1);});return json(res,200,{ok:true}); }
+    catch(error){return json(res,error.status||500,{error:error.message});}
   }
 
   const noteMatch = url.pathname.match(/^\/api\/tasks\/([^/]+)\/notes$/);
@@ -444,14 +454,16 @@ async function api(req, res, url) {
     const input = await body(req), progress = Number(input.progress), taskId = statusMatch[1];
     if (!STATUSES.includes(progress)) return json(res, 400, { error: 'Estado no permitido' });
     try {
-      const task = await mutateDb(db => {
+      const result = await mutateDb(db => {
         const found = db.tasks.find(item => item.id === taskId);
         if (!found) throw Object.assign(new Error('Tarea no encontrada'), { status: 404 });
         if (found.assigneeId !== user.id) throw Object.assign(new Error('Solo la persona asignada puede cambiar el estado'), { status: 403 });
-        found.progress = progress; found.updatedAt = new Date().toISOString(); found.completedAt = progress === 100 ? found.updatedAt : null;
-        return found;
+        const justCompleted = found.progress !== 100 && progress === 100;
+        found.progress = progress; found.updatedAt = new Date().toISOString(); found.completedAt = progress === 100 ? (found.completedAt || found.updatedAt) : null;
+        return { task: found, justCompleted };
       });
-      return json(res, 200, { task });
+      if(result.justCompleted)await sendDirectSystemMessage(user,result.task.creatorId,completionMessage(result.task,user.name),`${result.task.title} fue finalizada`,{systemType:'task_completed',relatedTaskType:'employee',relatedTaskId:result.task.id});
+      return json(res, 200, { task: result.task });
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
   }
 
@@ -550,6 +562,7 @@ async function api(req, res, url) {
       return json(res, 200, { task });
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
   }
+  if(req.method==='DELETE'&&machineTaskMatch){if(user.role!=='admin')return json(res,403,{error:'Solo el administrador puede eliminar tareas de maquinaria'});try{await mutateDb(db=>{const index=(db.machineTasks||[]).findIndex(item=>item.id===machineTaskMatch[1]);if(index<0)throw Object.assign(new Error('Tarea no encontrada'),{status:404});db.machineTasks.splice(index,1);});return json(res,200,{ok:true});}catch(error){return json(res,error.status||500,{error:error.message});}}
 
   const machineTaskAction = url.pathname.match(/^\/api\/machine-tasks\/([^/]+)\/(acknowledge|status|notes)$/);
   if (machineTaskAction && req.method === 'POST' && machineTaskAction[2] === 'acknowledge') {
@@ -558,7 +571,7 @@ async function api(req, res, url) {
   }
   if (machineTaskAction && req.method === 'PATCH' && machineTaskAction[2] === 'status') {
     const input=await body(req),progress=Number(input.progress); if(progress!==100)return json(res,400,{error:'El único estado permitido es Finalizada'});
-    try { const task=await mutateDb(db=>{const found=(db.machineTasks||[]).find(item=>item.id===machineTaskAction[1]);if(!found)throw Object.assign(new Error('Tarea no encontrada'),{status:404});if(found.assigneeId!==user.id)throw Object.assign(new Error('Solo el responsable puede cambiar el estado'),{status:403});found.progress=progress;found.updatedAt=new Date().toISOString();found.completedAt=progress===100?found.updatedAt:null;return found;});return json(res,200,{task}); }
+    try { const result=await mutateDb(db=>{const found=(db.machineTasks||[]).find(item=>item.id===machineTaskAction[1]);if(!found)throw Object.assign(new Error('Tarea no encontrada'),{status:404});if(found.assigneeId!==user.id)throw Object.assign(new Error('Solo el responsable puede cambiar el estado'),{status:403});const justCompleted=found.progress!==100;found.progress=progress;found.updatedAt=new Date().toISOString();found.completedAt ||= found.updatedAt;return{task:found,justCompleted};});if(result.justCompleted)await sendDirectSystemMessage(user,result.task.creatorId,completionMessage(result.task,user.name,'Tarea de maquinaria finalizada'),`${result.task.title} fue finalizada`,{systemType:'task_completed',relatedTaskType:'machine',relatedTaskId:result.task.id});return json(res,200,{task:result.task}); }
     catch(error){return json(res,error.status||500,{error:error.message});}
   }
   if (machineTaskAction && req.method === 'POST' && machineTaskAction[2] === 'notes') {
