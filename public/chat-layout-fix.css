@@ -1,0 +1,5 @@
+.chat-shell{height:calc(100dvh - 155px);min-height:360px}
+.chat-active{min-height:0;grid-template-rows:64px minmax(0,1fr) auto auto;overflow:hidden}
+.message-list{min-height:0}
+.chat-composer{position:relative;z-index:3;flex-shrink:0}
+@media(max-width:760px){.chat-shell{height:calc(100dvh - 125px);min-height:320px}.chat-room{min-height:0}.chat-view{overflow:hidden}}
