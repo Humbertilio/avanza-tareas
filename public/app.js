@@ -26,14 +26,15 @@ async function boot() {
 }
 async function enterApp() {
   $('#loginView').classList.add('hidden'); $('#appView').classList.remove('hidden');
-  $('#profileName').textContent = me.name; $('#profileRole').textContent = me.role === 'admin' ? 'Administrador' : 'Empleado'; $('#avatar').textContent = initials(me.name);
-  if (me.role === 'admin') $('#usersNav').classList.remove('hidden');
+  $('#profileName').textContent = me.name; $('#profileRole').textContent = me.role === 'admin' ? 'Administrador' : me.role==='client'?'Cliente':'Empleado'; $('#avatar').textContent = initials(me.name);
+  if (me.role === 'admin') { $('#usersNav').classList.remove('hidden');$('#clientsNav').classList.remove('hidden'); }
+  if(me.role==='client'){$$('.employee-nav').forEach(node=>node.classList.add('hidden'));history.replaceState({view:'chat'},'','#chat');showView('chat',false);return;}
   await refresh(); history.replaceState({ view: 'tasks' }, '', '#tasks'); showView('tasks', false);
 }
 async function refresh() {
   [users, tasks] = await Promise.all([request('/api/users').then(x => x.users), request('/api/tasks').then(x => x.tasks)]);
   users.sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
-  const assigneeOptions = '<option value="">Selecciona un empleado</option>' + users.filter(x => x.active).map(x => `<option value="${x.id}">${escapeHtml(x.name)}</option>`).join('');
+  const assigneeOptions = '<option value="">Selecciona un empleado</option>' + users.filter(x => x.active&&x.role!=='client').map(x => `<option value="${x.id}">${escapeHtml(x.name)}</option>`).join('');
   $('#assigneeSelect').innerHTML = assigneeOptions; $('#editAssigneeSelect').innerHTML = assigneeOptions;
   renderTasks(); renderUsers();
 }
@@ -79,7 +80,7 @@ function taskRow(task) {
   const description=`<div class="latest-note">${escapeHtml(latest)}</div>`;
   return `<tr class="${task.progress===100?'completed-row':''}"><td>${canEdit?`<button class="task-title-button" data-id="${task.id}" title="Modificar tarea">${escapeHtml(task.title)}</button>`:`<strong>${escapeHtml(task.title)}</strong>`}</td><td class="description-cell ${canNote?'can-comment':''}" data-task-id="${task.id}" tabindex="0" role="button" title="Doble clic para ver todo">${description}</td><td>${dateText(task.createdAt)}</td><td>${escapeHtml(task.creatorName)}</td><td>${escapeHtml(task.assigneeName)}</td><td>${dueDateText(task.dueDate)}</td><td>${statusControl}</td><td>${reading}</td><td class="row-actions">${actions}</td></tr>`;
 }
-function renderUsers() { $('#userList').innerHTML = users.map(user => `<div class="user-item ${user.active?'':'inactive'}"><div><strong>${escapeHtml(user.name)}</strong><span>@${escapeHtml(user.username)} · ${user.role === 'admin' ? 'Administrador' : 'Empleado'} · ${user.active?'Activo':'Desactivado'}</span></div>${me.role==='admin'?`<button class="edit-user" data-id="${user.id}">Editar</button>`:''}</div>`).join(''); $$('.edit-user').forEach(button=>button.addEventListener('click',()=>openEditUser(button.dataset.id))); }
+function renderUsers() { $('#userList').innerHTML = users.filter(user=>user.role!=='client').map(user => `<div class="user-item ${user.active?'':'inactive'}"><div><strong>${escapeHtml(user.name)}</strong><span>@${escapeHtml(user.username)} · ${user.role === 'admin' ? 'Administrador' : 'Empleado'} · ${user.active?'Activo':'Desactivado'}</span></div>${me.role==='admin'?`<button class="edit-user" data-id="${user.id}">Editar</button>`:''}</div>`).join(''); $$('.edit-user').forEach(button=>button.addEventListener('click',()=>openEditUser(button.dataset.id))); }
 function openEditUser(id) { const user=users.find(x=>x.id===id), form=$('#editUserForm'); if(!user)return; form.elements.id.value=user.id; form.elements.name.value=user.name; form.elements.username.value=user.username; form.elements.password.value=''; form.elements.role.value=user.role; form.elements.active.checked=user.active; form.querySelector('.formMessage').textContent=''; $('#editUserModal').classList.remove('hidden'); }
 function closeEditUser() { $('#editUserModal').classList.add('hidden'); }
 function openEditTask(id) { const task=tasks.find(x=>x.id===id),form=$('#editTaskForm'); if(!task)return; form.elements.id.value=task.id;form.elements.title.value=task.title;form.elements.assigneeId.value=task.assigneeId;form.elements.dueDate.value=task.dueDate||'';form.querySelector('.formMessage').textContent='';$('#editTaskModal').classList.remove('hidden'); }
@@ -91,7 +92,8 @@ function closeDescription() { $('#descriptionModal').classList.add('hidden'); }
 async function acknowledgeTask(id) { try { await request(`/api/tasks/${id}/acknowledge`,{method:'POST'});await refresh();toast('Lectura confirmada'); } catch(error){toast(error.message);} }
 async function updateStatus(event) { try { await request(`/api/tasks/${event.target.dataset.id}/status`, { method: 'PATCH', body: JSON.stringify({ progress: Number(event.target.value) }) }); await refresh(); toast('Estado actualizado'); } catch (error) { toast(error.message); await refresh(); } }
 async function deleteTask(id) { if(!confirm('¿Eliminar esta tarea definitivamente?'))return;try{await request(`/api/tasks/${id}`,{method:'DELETE'});await refresh();toast('Tarea eliminada');}catch(error){toast(error.message);} }
-function showView(name, addHistory = true) { ['tasks','all','new','machines','chat','users'].forEach(x => $(`#${x}View`).classList.toggle('hidden', x !== name)); $$('.nav').forEach(x => x.classList.toggle('active', x.dataset.view === name)); $('.mobile-new').classList.toggle('hidden', ['machines','chat','users'].includes(name)); $('#greeting').textContent = name === 'tasks' ? 'Tus tareas' : name === 'all' ? 'Todas las tareas' : name === 'new' ? 'Crear una tarea' : name === 'machines' ? 'Maquinarias' : name === 'chat' ? 'Chat' : 'Gestión del equipo'; const sameScreen=history.state?.view===name&&!history.state?.machineId&&!history.state?.conversationId;if(addHistory&&!sameScreen)history.pushState({view:name},'',`#${name}`);if(name==='machines')window.loadMachinery?.();if(name==='chat')window.loadChat?.(); }
+function showView(name, addHistory = true) { ['tasks','all','new','machines','chat','clients','users'].forEach(x => $(`#${x}View`).classList.toggle('hidden', x !== name)); $$('.nav').forEach(x => x.classList.toggle('active', x.dataset.view === name)); $('.mobile-new').classList.toggle('hidden', ['machines','chat','clients','users'].includes(name)); $('#greeting').textContent = name === 'tasks' ? 'Tus tareas' : name === 'all' ? 'Todas las tareas' : name === 'new' ? 'Crear una tarea' : name === 'machines' ? 'Maquinarias' : name === 'chat' ? 'Chat' : name==='clients'?'Clientes':'Gestión del equipo'; const sameScreen=history.state?.view===name&&!history.state?.machineId&&!history.state?.conversationId;if(addHistory&&!sameScreen)history.pushState({view:name},'',`#${name}`);if(name==='machines')window.loadMachinery?.();if(name==='chat')window.loadChat?.();if(name==='clients')window.loadClients?.(); }
+window.showAvanzaView=showView;
 function closeInstall() { $('#installModal').classList.add('hidden'); }
 function showDeviceInstructions(device) {
   const target=$('#deviceInstructions'); $$('.device-options button').forEach(button=>button.classList.toggle('active',button.dataset.device===device));

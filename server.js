@@ -12,9 +12,9 @@ const DATA_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'database.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const SESSION_HOURS = 12;
-const TASK_RETENTION_MS = 15 * 24 * 60 * 60 * 1000;
+const TASK_RETENTION_MS = Number(process.env.TASK_RETENTION_MS || 48 * 60 * 60 * 1000);
 const STATUSES = [0, 25, 50, 75, 100];
-const ROLES = ['admin', 'employee'];
+const ROLES = ['admin', 'employee', 'client'];
 const sessions = new Map();
 const chatStreams = new Map();
 let writeQueue = Promise.resolve();
@@ -38,6 +38,7 @@ function initialDatabase() {
       active: true, salt: credentials.salt, passwordHash: credentials.hash,
       createdAt: new Date().toISOString()
     }],
+    companies: [],
     tasks: [],
     machines: [],
     machineTasks: [],
@@ -70,6 +71,7 @@ function configurePush() {
   if (!Array.isArray(db.pushSubscriptions)) { db.pushSubscriptions = []; changed = true; }
   if (!Array.isArray(db.machines)) { db.machines = []; changed = true; }
   if (!Array.isArray(db.machineTasks)) { db.machineTasks = []; changed = true; }
+  if (!Array.isArray(db.companies)) { db.companies = []; changed = true; }
   for (const collection of ['conversations', 'conversationParticipants', 'messages', 'attachments', 'messageReceipts', 'calls']) {
     if (!Array.isArray(db[collection])) { db[collection] = []; changed = true; }
   }
@@ -128,7 +130,7 @@ function currentUser(req) {
 }
 
 function publicUser(user) {
-  return { id: user.id, name: user.name, username: user.username, role: user.role, active: user.active };
+  return { id: user.id, name: user.name, username: user.username, role: user.role, active: user.active, companyId: user.companyId || null, position: user.position || '', phone: user.phone || '', email: user.email || '' };
 }
 
 function clean(value, max = 200) { return String(value || '').trim().slice(0, max); }
@@ -195,8 +197,9 @@ async function notifyUser(userId, payload) {
 
 async function purgeExpiredTasks() {
   const cutoff = Date.now() - TASK_RETENTION_MS;
-  const hasExpired = readDb().tasks.some(task => task.progress === 100 && task.completedAt && new Date(task.completedAt).getTime() <= cutoff);
-  if (hasExpired) await mutateDb(db => { db.tasks = db.tasks.filter(task => !(task.progress === 100 && task.completedAt && new Date(task.completedAt).getTime() <= cutoff)); });
+  const expired=task=>task.progress===100&&task.completedAt&&new Date(task.completedAt).getTime()<=cutoff;
+  const current=readDb(),hasExpired=current.tasks.some(expired)||(current.machineTasks||[]).some(expired);
+  if(hasExpired)await mutateDb(db=>{db.tasks=db.tasks.filter(task=>!expired(task));db.machineTasks=(db.machineTasks||[]).filter(task=>!expired(task));});
 }
 
 async function api(req, res, url) {
@@ -233,6 +236,8 @@ async function api(req, res, url) {
     return json(res, 201, { ok: true });
   }
 
+  if(user.role==='client'&&!url.pathname.startsWith('/api/chat/')&&!url.pathname.startsWith('/api/companies'))return json(res,403,{error:'Los clientes solo tienen acceso al chat de su empresa'});
+
   if (req.method === 'GET' && url.pathname === '/api/users') {
     const allUsers = readDb().users;
     return json(res, 200, { users: (user.role === 'admin' ? allUsers : allUsers.filter(item => item.active)).map(publicUser).sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' })) });
@@ -243,7 +248,7 @@ async function api(req, res, url) {
     const input = await body(req);
     const name = clean(input.name, 100), username = clean(input.username, 60).toLowerCase();
     const password = String(input.password || ''), role = clean(input.role, 20) || 'employee';
-    if (!name || !/^[a-z0-9._-]{3,60}$/i.test(username) || password.length !== 4 || !ROLES.includes(role)) return json(res, 400, { error: 'Nombre, usuario válido, contraseña de 4 caracteres y rol válido son obligatorios' });
+    if (!name || !/^[a-z0-9._-]{3,60}$/i.test(username) || password.length !== 4 || !ROLES.includes(role) || role==='client') return json(res, 400, { error: 'Los contactos cliente deben crearse desde Empresas' });
     try {
       const created = await mutateDb(db => {
         if (db.users.some(item => item.username.toLowerCase() === username)) throw Object.assign(new Error('El usuario ya existe'), { status: 409 });
@@ -267,6 +272,7 @@ async function api(req, res, url) {
       const updated = await mutateDb(db => {
         const found = db.users.find(item => item.id === userId);
         if (!found) throw Object.assign(new Error('Usuario no encontrado'), { status: 404 });
+        if((found.companyId&&role!=='client')||(!found.companyId&&role==='client'))throw Object.assign(new Error('El rol Cliente se administra desde Empresas'),{status:400});
         if (db.users.some(item => item.id !== userId && item.username.toLowerCase() === username)) throw Object.assign(new Error('El nombre de usuario ya existe'), { status: 409 });
         const removesAdmin = found.role === 'admin' && found.active && (role !== 'admin' || !active);
         const activeAdmins = db.users.filter(item => item.role === 'admin' && item.active).length;
@@ -279,6 +285,30 @@ async function api(req, res, url) {
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/companies') {
+    const db=readDb();
+    if(user.role!=='admin'&&user.role!=='client')return json(res,403,{error:'No tiene acceso a empresas'});
+    const allowed=user.role==='admin'?db.companies:db.companies.filter(company=>company.id===user.companyId);
+    return json(res,200,{companies:allowed.map(company=>{const conversation=db.conversations.find(item=>item.companyId===company.id);const participantIds=conversation?chatUserIds(db,conversation.id):[];return{...company,conversationId:conversation?.id||null,contacts:db.users.filter(item=>item.role==='client'&&item.companyId===company.id).map(publicUser).sort((a,b)=>a.name.localeCompare(b.name,'es')),employeeIds:participantIds.filter(id=>db.users.some(item=>item.id===id&&item.role==='employee'))};}).sort((a,b)=>a.name.localeCompare(b.name,'es'))});
+  }
+
+  if(req.method==='POST'&&url.pathname==='/api/companies'){
+    if(user.role!=='admin')return json(res,403,{error:'Solo el administrador puede crear empresas'});
+    const input=await body(req),name=clean(input.name,120),taxId=clean(input.taxId,60),address=clean(input.address,180),city=clean(input.city,100),phone=clean(input.phone,60),employeeIds=[...new Set(Array.isArray(input.employeeIds)?input.employeeIds.map(id=>clean(id,100)):[])],contact=input.contact||{},contactName=clean(contact.name,100),username=clean(contact.username,60).toLowerCase(),password=String(contact.password||''),position=clean(contact.position,100),contactPhone=clean(contact.phone,60),email=clean(contact.email,120);
+    if(!name||employeeIds.length<2||!contactName||!/^[a-z0-9._-]{3,60}$/i.test(username)||password.length!==4)return json(res,400,{error:'Empresa, contacto, contraseña de 4 caracteres y al menos dos empleados son obligatorios'});
+    try{const created=await mutateDb(db=>{if(db.companies.some(item=>item.name.toLowerCase()===name.toLowerCase()))throw Object.assign(new Error('Ya existe una empresa con ese nombre'),{status:409});if(db.users.some(item=>item.username.toLowerCase()===username))throw Object.assign(new Error('El usuario ya existe'),{status:409});if(employeeIds.some(id=>!db.users.some(item=>item.id===id&&item.active&&item.role==='employee')))throw Object.assign(new Error('Seleccione al menos dos empleados activos'),{status:400});const now=new Date().toISOString(),company={id:crypto.randomUUID(),name,taxId,address,city,phone,createdAt:now,updatedAt:now},credentials=passwordHash(password),client={id:crypto.randomUUID(),name:contactName,username,role:'client',companyId:company.id,position,phone:contactPhone,email,active:true,salt:credentials.salt,passwordHash:credentials.hash,createdAt:now},conversation={id:crypto.randomUUID(),type:'group',title:name,companyId:company.id,createdBy:user.id,createdAt:now,updatedAt:now,pinnedBy:[],settings:{clientGroup:true}};db.companies.push(company);db.users.push(client);db.conversations.push(conversation);[client.id,...employeeIds].forEach(userId=>db.conversationParticipants.push({id:crypto.randomUUID(),conversationId:conversation.id,userId,role:'member',joinedAt:now,lastReadAt:null,lastReadMessageId:null,muted:false}));return{company,contact:publicUser(client),conversationId:conversation.id};});created.employeeIds=employeeIds;return json(res,201,created);}catch(error){return json(res,error.status||500,{error:error.message});}
+  }
+
+  const companyMatch=url.pathname.match(/^\/api\/companies\/([^/]+)$/);
+  if(req.method==='PATCH'&&companyMatch){if(user.role!=='admin')return json(res,403,{error:'Solo el administrador puede editar empresas'});const input=await body(req),name=clean(input.name,120),taxId=clean(input.taxId,60),address=clean(input.address,180),city=clean(input.city,100),phone=clean(input.phone,60),employeeIds=[...new Set(Array.isArray(input.employeeIds)?input.employeeIds.map(id=>clean(id,100)):[])];if(!name||employeeIds.length<2)return json(res,400,{error:'Nombre y al menos dos empleados son obligatorios'});try{const company=await mutateDb(db=>{const found=db.companies.find(item=>item.id===companyMatch[1]);if(!found)throw Object.assign(new Error('Empresa no encontrada'),{status:404});if(employeeIds.some(id=>!db.users.some(item=>item.id===id&&item.active&&item.role==='employee')))throw Object.assign(new Error('Seleccione empleados activos'),{status:400});const conversation=db.conversations.find(item=>item.companyId===found.id);if(!conversation)throw Object.assign(new Error('Grupo de empresa no encontrado'),{status:404});found.name=name;found.taxId=taxId;found.address=address;found.city=city;found.phone=phone;found.updatedAt=new Date().toISOString();conversation.title=name;conversation.updatedAt=found.updatedAt;const contactIds=db.users.filter(item=>item.role==='client'&&item.companyId===found.id&&item.active).map(item=>item.id),keep=new Set([...contactIds,...employeeIds]);db.conversationParticipants=db.conversationParticipants.filter(item=>item.conversationId!==conversation.id||keep.has(item.userId));for(const userId of keep)if(!chatParticipant(db,conversation.id,userId))db.conversationParticipants.push({id:crypto.randomUUID(),conversationId:conversation.id,userId,role:'member',joinedAt:found.updatedAt,lastReadAt:null,lastReadMessageId:null,muted:false});return found;});return json(res,200,{company});}catch(error){return json(res,error.status||500,{error:error.message});}}
+  if(req.method==='DELETE'&&companyMatch){if(user.role!=='admin')return json(res,403,{error:'Solo el administrador puede eliminar empresas'});try{await mutateDb(db=>{const companyId=companyMatch[1],index=db.companies.findIndex(item=>item.id===companyId);if(index<0)throw Object.assign(new Error('Empresa no encontrada'),{status:404});const conversationIds=db.conversations.filter(item=>item.companyId===companyId).map(item=>item.id),messageIds=db.messages.filter(item=>conversationIds.includes(item.conversationId)).map(item=>item.id),clientIds=db.users.filter(item=>item.companyId===companyId).map(item=>item.id);db.companies.splice(index,1);db.users=db.users.filter(item=>!clientIds.includes(item.id));db.conversations=db.conversations.filter(item=>!conversationIds.includes(item.id));db.conversationParticipants=db.conversationParticipants.filter(item=>!conversationIds.includes(item.conversationId));db.messages=db.messages.filter(item=>!conversationIds.includes(item.conversationId));db.attachments=db.attachments.filter(item=>!messageIds.includes(item.messageId));db.messageReceipts=db.messageReceipts.filter(item=>!messageIds.includes(item.messageId));db.pushSubscriptions=(db.pushSubscriptions||[]).filter(item=>!clientIds.includes(item.userId));});return json(res,200,{ok:true});}catch(error){return json(res,error.status||500,{error:error.message});}}
+
+  const contactMatch=url.pathname.match(/^\/api\/companies\/([^/]+)\/contacts(?:\/([^/]+))?$/);
+  if(req.method==='POST'&&contactMatch&&!contactMatch[2]){if(user.role!=='admin')return json(res,403,{error:'Solo el administrador puede agregar contactos'});const input=await body(req),name=clean(input.name,100),username=clean(input.username,60).toLowerCase(),password=String(input.password||''),position=clean(input.position,100),phone=clean(input.phone,60),email=clean(input.email,120);if(!name||!/^[a-z0-9._-]{3,60}$/i.test(username)||password.length!==4)return json(res,400,{error:'Nombre, usuario y contraseña de 4 caracteres son obligatorios'});try{const contact=await mutateDb(db=>{const company=db.companies.find(item=>item.id===contactMatch[1]);if(!company)throw Object.assign(new Error('Empresa no encontrada'),{status:404});if(db.users.some(item=>item.username.toLowerCase()===username))throw Object.assign(new Error('El usuario ya existe'),{status:409});const conversation=db.conversations.find(item=>item.companyId===company.id),now=new Date().toISOString(),credentials=passwordHash(password),next={id:crypto.randomUUID(),name,username,role:'client',companyId:company.id,position,phone,email,active:true,salt:credentials.salt,passwordHash:credentials.hash,createdAt:now};db.users.push(next);db.conversationParticipants.push({id:crypto.randomUUID(),conversationId:conversation.id,userId:next.id,role:'member',joinedAt:now,lastReadAt:null,lastReadMessageId:null,muted:false});return publicUser(next);});return json(res,201,{contact});}catch(error){return json(res,error.status||500,{error:error.message});}}
+  if(req.method==='PATCH'&&contactMatch&&contactMatch[2]){if(user.role!=='admin')return json(res,403,{error:'Solo el administrador puede editar contactos'});const input=await body(req),name=clean(input.name,100),username=clean(input.username,60).toLowerCase(),password=String(input.password||''),position=clean(input.position,100),phone=clean(input.phone,60),email=clean(input.email,120),active=input.active===true;if(!name||!/^[a-z0-9._-]{3,60}$/i.test(username)||(password&&password.length!==4))return json(res,400,{error:'Datos de contacto inválidos'});try{const contact=await mutateDb(db=>{const found=db.users.find(item=>item.id===contactMatch[2]&&item.companyId===contactMatch[1]&&item.role==='client');if(!found)throw Object.assign(new Error('Contacto no encontrado'),{status:404});if(db.users.some(item=>item.id!==found.id&&item.username.toLowerCase()===username))throw Object.assign(new Error('El usuario ya existe'),{status:409});found.name=name;found.username=username;found.position=position;found.phone=phone;found.email=email;found.active=active;found.updatedAt=new Date().toISOString();if(password){const credentials=passwordHash(password);found.salt=credentials.salt;found.passwordHash=credentials.hash;}return publicUser(found);});return json(res,200,{contact});}catch(error){return json(res,error.status||500,{error:error.message});}}
+
+  if(req.method==='POST'&&url.pathname==='/api/chat/groups'){if(user.role!=='admin')return json(res,403,{error:'Solo el administrador puede crear grupos'});const input=await body(req),title=clean(input.title,120),participantIds=[...new Set(Array.isArray(input.participantIds)?input.participantIds.map(id=>clean(id,100)):[])];if(!title||participantIds.length<2)return json(res,400,{error:'Nombre y al menos dos integrantes son obligatorios'});try{const conversation=await mutateDb(db=>{if(participantIds.some(id=>!db.users.some(item=>item.id===id&&item.active&&item.role!=='client')))throw Object.assign(new Error('Los clientes solo pueden estar en el grupo de su empresa'),{status:400});const now=new Date().toISOString(),next={id:crypto.randomUUID(),type:'group',title,companyId:null,createdBy:user.id,createdAt:now,updatedAt:now,pinnedBy:[],settings:{}};db.conversations.push(next);participantIds.forEach(userId=>db.conversationParticipants.push({id:crypto.randomUUID(),conversationId:next.id,userId,role:'member',joinedAt:now,lastReadAt:null,lastReadMessageId:null,muted:false}));return next;});participantIds.forEach(id=>emitChat(id,'conversation',{conversationId:conversation.id}));return json(res,201,{conversation});}catch(error){return json(res,error.status||500,{error:error.message});}}
+
   if (req.method === 'GET' && url.pathname === '/api/chat/events') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
     res.write(`event: connected\ndata: ${JSON.stringify({ ok: true })}\n\n`);
@@ -290,28 +320,30 @@ async function api(req, res, url) {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/chat/members') {
-    return json(res, 200, { members: readDb().users.filter(item => item.active && item.id !== user.id).map(publicUser).sort((a,b)=>a.name.localeCompare(b.name,'es',{sensitivity:'base'})) });
+    const members=user.role==='client'?[]:readDb().users.filter(item=>item.active&&item.id!==user.id&&item.role!=='client').map(publicUser).sort((a,b)=>a.name.localeCompare(b.name,'es',{sensitivity:'base'}));
+    return json(res, 200, { members });
   }
 
   if (req.method === 'GET' && url.pathname === '/api/chat/conversations') {
-    const db = readDb(), memberships = user.role === 'admin' ? db.conversations.map(conversation => ({ conversationId: conversation.id, observer: !chatParticipant(db,conversation.id,user.id) })) : (db.conversationParticipants || []).filter(item => item.userId === user.id);
+    const db = readDb(), memberships = user.role === 'admin' ? db.conversations.map(conversation => ({ conversationId: conversation.id, observer: !chatParticipant(db,conversation.id,user.id) })) : (db.conversationParticipants || []).filter(item => item.userId === user.id && (user.role!=='client'||db.conversations.some(conversation=>conversation.id===item.conversationId&&conversation.companyId===user.companyId)));
     const conversations = memberships.map(membership => {
       const conversation = db.conversations.find(item => item.id === membership.conversationId);
       if (!conversation) return null;
-      const participantIds = chatUserIds(db, conversation.id), observer = !participantIds.includes(user.id), otherId = participantIds.find(id => id !== user.id), participantUsers = participantIds.map(id => db.users.find(item => item.id === id)).filter(Boolean), other = observer ? null : db.users.find(item => item.id === otherId), displayName = observer ? participantUsers.map(item=>item.name).join(' ↔ ') : other?.name || 'Usuario eliminado';
+      const participantIds = chatUserIds(db, conversation.id), observer = !participantIds.includes(user.id), otherId = participantIds.find(id => id !== user.id), participantUsers = participantIds.map(id => db.users.find(item => item.id === id)).filter(Boolean), other = conversation.type==='direct'&&!observer ? db.users.find(item => item.id === otherId) : null, displayName = conversation.type==='group' ? conversation.title || 'Grupo' : observer ? participantUsers.map(item=>item.name).join(' ↔ ') : other?.name || 'Usuario eliminado';
       const messages = db.messages.filter(item => item.conversationId === conversation.id && !item.deletedAt && !(item.deletedForUserIds||[]).includes(user.id)).sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
       const last = messages[messages.length - 1], unread = observer ? 0 : (db.messageReceipts || []).filter(item => item.userId === user.id && !item.readAt && messages.some(message => message.id === item.messageId)).length;
-      return { id: conversation.id, type: conversation.type, user: other ? publicUser(other) : { id: otherId || conversation.id, name: displayName, username: '', role: 'employee', active: true }, participants: participantUsers.map(publicUser), observer, lastMessage: last ? publicMessage(db,last) : null, unread, updatedAt: last?.createdAt || conversation.updatedAt || conversation.createdAt, pinned: (conversation.pinnedBy || []).includes(user.id) };
+      return { id: conversation.id, type: conversation.type, companyId:conversation.companyId||null, title:conversation.title||null, user: other ? publicUser(other) : { id: conversation.id, name: displayName, username: '', role: 'group', active: true }, participants: participantUsers.map(publicUser), observer, lastMessage: last ? publicMessage(db,last) : null, unread, updatedAt: last?.createdAt || conversation.updatedAt || conversation.createdAt, pinned: (conversation.pinnedBy || []).includes(user.id) };
     }).filter(Boolean).sort((a,b)=>(b.pinned-a.pinned)||b.updatedAt.localeCompare(a.updatedAt));
     return json(res, 200, { conversations, totalUnread: conversations.reduce((sum,item)=>sum+item.unread,0) });
   }
 
   if (req.method === 'POST' && url.pathname === '/api/chat/conversations') {
+    if(user.role==='client')return json(res,403,{error:'Los clientes utilizan el grupo de su empresa'});
     const input = await body(req), otherId = clean(input.userId, 100);
     if (!otherId || otherId === user.id) return json(res, 400, { error: 'Seleccione otro usuario' });
     try {
       const conversation = await mutateDb(db => {
-        if (!db.users.some(item => item.id === otherId && item.active)) throw Object.assign(new Error('Usuario no encontrado'), { status: 404 });
+        if (!db.users.some(item => item.id === otherId && item.active && item.role!=='client')) throw Object.assign(new Error('Los contactos cliente solo participan en el grupo de su empresa'), { status: 400 });
         const existing = db.conversations.find(item => item.type === 'direct' && chatUserIds(db,item.id).length === 2 && chatUserIds(db,item.id).includes(user.id) && chatUserIds(db,item.id).includes(otherId));
         if (existing) return existing;
         const now = new Date().toISOString(), next = { id: crypto.randomUUID(), type: 'direct', title: null, createdBy: user.id, createdAt: now, updatedAt: now, pinnedBy: [], settings: {} };
@@ -376,7 +408,7 @@ async function api(req, res, url) {
   }
 
   const chatReadMatch=url.pathname.match(/^\/api\/chat\/conversations\/([^/]+)\/read$/);
-  if(req.method==='POST'&&chatReadMatch){const conversationId=chatReadMatch[1];try{const result=await mutateDb(db=>{const participant=chatParticipant(db,conversationId,user.id);if(!participant)throw Object.assign(new Error('No pertenece a esta conversación'),{status:403});const ids=db.messages.filter(item=>item.conversationId===conversationId&&!item.deletedAt&&!(item.deletedForUserIds||[]).includes(user.id)).map(item=>item.id),changed=[],deletedTasks=[],now=new Date().toISOString();db.messageReceipts.filter(item=>item.userId===user.id&&ids.includes(item.messageId)&&!item.readAt).forEach(item=>{item.deliveredAt||=now;item.readAt=now;changed.push(item.messageId);const message=db.messages.find(entry=>entry.id===item.messageId);if(message?.systemType==='task_completed'&&message.relatedTaskId){if(message.relatedTaskType==='employee'){const before=db.tasks.length;db.tasks=db.tasks.filter(task=>task.id!==message.relatedTaskId);if(db.tasks.length<before)deletedTasks.push({type:'employee',id:message.relatedTaskId});}if(message.relatedTaskType==='machine'){const before=(db.machineTasks||[]).length;db.machineTasks=(db.machineTasks||[]).filter(task=>task.id!==message.relatedTaskId);if(db.machineTasks.length<before)deletedTasks.push({type:'machine',id:message.relatedTaskId});}}});participant.lastReadAt=now;participant.lastReadMessageId=ids[ids.length-1]||null;return{messageIds:changed,deletedTasks};});if(result.messageIds.length){const db=readDb();emitConversation(db,conversationId,'read',{conversationId,userId:user.id,messageIds:result.messageIds});}return json(res,200,{ok:true,deletedTasks:result.deletedTasks});}catch(error){return json(res,error.status||500,{error:error.message});}}
+  if(req.method==='POST'&&chatReadMatch){const conversationId=chatReadMatch[1];try{const result=await mutateDb(db=>{const participant=chatParticipant(db,conversationId,user.id);if(!participant)throw Object.assign(new Error('No pertenece a esta conversación'),{status:403});const ids=db.messages.filter(item=>item.conversationId===conversationId&&!item.deletedAt&&!(item.deletedForUserIds||[]).includes(user.id)).map(item=>item.id),changed=[],now=new Date().toISOString();db.messageReceipts.filter(item=>item.userId===user.id&&ids.includes(item.messageId)&&!item.readAt).forEach(item=>{item.deliveredAt||=now;item.readAt=now;changed.push(item.messageId);});participant.lastReadAt=now;participant.lastReadMessageId=ids[ids.length-1]||null;return{messageIds:changed};});if(result.messageIds.length){const db=readDb();emitConversation(db,conversationId,'read',{conversationId,userId:user.id,messageIds:result.messageIds});}return json(res,200,{ok:true,deletedTasks:[]});}catch(error){return json(res,error.status||500,{error:error.message});}}
 
   const chatTypingMatch=url.pathname.match(/^\/api\/chat\/conversations\/([^/]+)\/typing$/);
   if(req.method==='POST'&&chatTypingMatch){const input=await body(req),db=readDb(),conversationId=chatTypingMatch[1];if(!chatParticipant(db,conversationId,user.id))return json(res,403,{error:'No pertenece a esta conversación'});chatUserIds(db,conversationId).filter(id=>id!==user.id).forEach(id=>emitChat(id,'typing',{conversationId,userId:user.id,name:user.name,typing:input.typing===true}));return json(res,200,{ok:true});}
