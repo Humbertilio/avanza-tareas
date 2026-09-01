@@ -2,6 +2,10 @@
 
 Aplicación web multiusuario, adaptable a teléfonos y computadoras. Cualquier empleado puede crear y asignar una tarea; solamente el empleado asignado puede cambiar su avance entre 0%, 25%, 50%, 75% y Finalizada.
 
+Avanza incluye también el módulo de inventario anteriormente identificado como Nexo. Utiliza el mismo inicio de sesión y la misma base de datos: administradores controlan todas las operaciones, empleados administran entradas y salidas sin borrar, y clientes consultan artículos activos y envían solicitudes de compra.
+
+El inventario admite los campos Material, Calibre, Ancho, Peso, Gramaje, Ubicación, ID opcional, Observación y Destino. También permite importar libros Excel, evita repetir una misma hoja, conserva el historial de movimientos y muestra la información en una cuadrícula compacta con filtros y encabezados fijos.
+
 Una vez publicada mediante HTTPS, puede instalarse en la pantalla principal del teléfono con su propio icono, como una aplicación (PWA).
 
 Todos los usuarios pueden consultar la tabla general de tareas, ordenarla y filtrarla por columnas. Las tareas requieren una fecha de terminación, pueden ser editadas por su creador y deben ser confirmadas como leídas por el empleado asignado. Los estados disponibles son 0%, 25%, 50%, 75% y Finalizada.

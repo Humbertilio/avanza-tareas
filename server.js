@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const webpush = require('web-push');
+const XLSX = require('xlsx');
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -48,7 +49,11 @@ function initialDatabase() {
     messages: [],
     attachments: [],
     messageReceipts: [],
-    calls: []
+    calls: [],
+    inventoryItems: [],
+    inventoryMovements: [],
+    inventoryImports: [],
+    purchaseRequests: []
   };
 }
 
@@ -75,6 +80,9 @@ function configurePush() {
   if (!Array.isArray(db.companies)) { db.companies = []; changed = true; }
   if (!Array.isArray(db.clientApplications)) { db.clientApplications = []; changed = true; }
   for (const collection of ['conversations', 'conversationParticipants', 'messages', 'attachments', 'messageReceipts', 'calls']) {
+    if (!Array.isArray(db[collection])) { db[collection] = []; changed = true; }
+  }
+  for (const collection of ['inventoryItems', 'inventoryMovements', 'inventoryImports', 'purchaseRequests']) {
     if (!Array.isArray(db[collection])) { db[collection] = []; changed = true; }
   }
   if (!db.meta.vapidKeys) { db.meta.vapidKeys = webpush.generateVAPIDKeys(); changed = true; }
@@ -137,6 +145,22 @@ function publicUser(user) {
 
 function clean(value, max = 200) { return String(value || '').trim().slice(0, max); }
 function validDate(value) { return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value + 'T00:00:00Z')); }
+function validPhone(value) { return !value || /^\d{3}-\d{3}-\d{4}$/.test(value); }
+function inventoryNumber(value, integer = true) {
+  if (value === null || value === undefined || String(value).trim() === '') return null;
+  const normalized = String(value).trim().replace(',', '.');
+  if (integer ? !/^\d+$/.test(normalized) : !/^\d+(?:\.\d)?$/.test(normalized)) throw Object.assign(new Error(integer ? 'El valor debe ser entero' : 'Ancho admite máximo un decimal'), { status: 400 });
+  return Number(normalized);
+}
+function validatedInventoryItem(input) {
+  const material = clean(input.material, 20), ubicacion = clean(input.ubicacion, 20), externalId = clean(input.externalId ?? input.id, 20), observacion = clean(input.observacion, 100), destino = clean(input.destino, 100);
+  if (!material || material.length > 4 || !/^[a-z0-9]+$/i.test(material)) throw Object.assign(new Error('Material debe ser alfanumérico y tener máximo 4 caracteres'), { status: 400 });
+  if (ubicacion.length > 6 || (ubicacion && !/^[a-z0-9 ]+$/i.test(ubicacion))) throw Object.assign(new Error('Ubicación debe ser alfanumérica y tener máximo 6 caracteres'), { status: 400 });
+  if (externalId.length > 7 || (externalId && !/^[a-z0-9]+$/i.test(externalId))) throw Object.assign(new Error('ID debe ser alfanumérico y tener máximo 7 caracteres'), { status: 400 });
+  if (observacion.length > 40 || destino.length > 40) throw Object.assign(new Error('Observación y destino admiten máximo 40 caracteres'), { status: 400 });
+  return { material: material.toUpperCase(), calibre: inventoryNumber(input.calibre), ancho: inventoryNumber(input.ancho, false), peso: inventoryNumber(input.peso), gramaje: inventoryNumber(input.gramaje), ubicacion, externalId, observacion, destino };
+}
+function inventoryRowHash(item) { return crypto.createHash('sha256').update(JSON.stringify([item.material,item.calibre,item.ancho,item.peso,item.gramaje,item.ubicacion,item.externalId,item.observacion,item.destino])).digest('hex'); }
 function requireUser(req, res) {
   const user = currentUser(req);
   if (!user) json(res, 401, { error: 'Debes iniciar sesión' });
@@ -198,6 +222,7 @@ async function notifyUser(userId, payload) {
 }
 
 async function purgeExpiredTasks() {
+  if (TASK_RETENTION_MS <= 0) return;
   const cutoff = Date.now() - TASK_RETENTION_MS;
   const expired=task=>task.progress===100&&task.completedAt&&new Date(task.completedAt).getTime()<=cutoff;
   const current=readDb(),hasExpired=current.tasks.some(expired)||(current.machineTasks||[]).some(expired);
@@ -208,6 +233,7 @@ async function api(req, res, url) {
   if (req.method === 'POST' && url.pathname === '/api/client-applications') {
     const input=await body(req),company=input.company||{},contact=input.contact||{},name=clean(company.name,120),taxId=clean(company.taxId,60),address=clean(company.address,180),city=clean(company.city,100),companyPhone=clean(company.phone,60),contactName=clean(contact.name,100),position=clean(contact.position,100),phone=clean(contact.phone,60),email=clean(contact.email,120),username=clean(contact.username,60).toLowerCase(),password=String(contact.password||'');
     if(!name||!contactName||!/^[a-z0-9._-]{3,60}$/i.test(username)||password.length!==4)return json(res,400,{error:'Empresa, nombre, usuario y contraseña de 4 caracteres son obligatorios'});
+    if(!validPhone(companyPhone)||!validPhone(phone))return json(res,400,{error:'El teléfono debe usar el formato 000-000-0000'});
     try{const application=await mutateDb(db=>{if(db.users.some(item=>item.username.toLowerCase()===username)||(db.clientApplications||[]).some(item=>item.status==='pending'&&item.username===username))throw Object.assign(new Error('Ese usuario ya existe o tiene una solicitud pendiente'),{status:409});const credentials=passwordHash(password),now=new Date().toISOString(),next={id:crypto.randomUUID(),status:'pending',company:{name,taxId,address,city,phone:companyPhone},contact:{name:contactName,position,phone,email},username,salt:credentials.salt,passwordHash:credentials.hash,createdAt:now,updatedAt:now};db.clientApplications.push(next);return{id:next.id,status:next.status};});return json(res,201,{application});}catch(error){return json(res,error.status||500,{error:error.message});}
   }
 
@@ -244,7 +270,134 @@ async function api(req, res, url) {
     return json(res, 201, { ok: true });
   }
 
-  if(user.role==='client'&&!url.pathname.startsWith('/api/chat/')&&!url.pathname.startsWith('/api/companies'))return json(res,403,{error:'Los clientes solo tienen acceso al chat de su empresa'});
+  if (req.method === 'GET' && url.pathname === '/api/inventory') {
+    const db = readDb();
+    const items = (db.inventoryItems || []).filter(item => user.role !== 'client' || item.active);
+    const orders = user.role === 'admin' ? (db.purchaseRequests || []) : user.role === 'client' ? (db.purchaseRequests || []).filter(item => item.customerId === user.id) : [];
+    return json(res, 200, {
+      items,
+      movements: user.role === 'client' ? [] : (db.inventoryMovements || []).slice().sort((a,b) => b.createdAt.localeCompare(a.createdAt)),
+      imports: user.role === 'client' ? [] : (db.inventoryImports || []).slice().sort((a,b) => b.importedAt.localeCompare(a.importedAt)),
+      orders: orders.slice().sort((a,b) => b.createdAt.localeCompare(a.createdAt))
+    });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/inventory/items') {
+    if (!['admin','employee'].includes(user.role)) return json(res, 403, { error: 'No autorizado' });
+    try {
+      const values = validatedInventoryItem(await body(req));
+      const item = await mutateDb(db => {
+        if (values.externalId && (db.inventoryItems || []).some(row => row.externalId.toLowerCase() === values.externalId.toLowerCase())) throw Object.assign(new Error('Ese ID ya existe'), { status: 409 });
+        const now = new Date().toISOString(), next = { id: crypto.randomUUID(), ...values, active: true, rowHash: inventoryRowHash(values), createdAt: now, updatedAt: now };
+        db.inventoryItems.push(next); return next;
+      });
+      return json(res, 201, { item });
+    } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
+
+  const inventoryItemMatch = url.pathname.match(/^\/api\/inventory\/items\/([^/]+)$/);
+  if (req.method === 'PATCH' && inventoryItemMatch) {
+    if (!['admin','employee'].includes(user.role)) return json(res, 403, { error: 'No autorizado' });
+    try {
+      const values = validatedInventoryItem(await body(req));
+      const item = await mutateDb(db => {
+        const found = db.inventoryItems.find(row => row.id === inventoryItemMatch[1]);
+        if (!found) throw Object.assign(new Error('Artículo no encontrado'), { status: 404 });
+        if (values.externalId && db.inventoryItems.some(row => row.id !== found.id && row.externalId.toLowerCase() === values.externalId.toLowerCase())) throw Object.assign(new Error('Ese ID ya existe'), { status: 409 });
+        Object.assign(found, values, { rowHash: inventoryRowHash(values), updatedAt: new Date().toISOString() }); return found;
+      });
+      return json(res, 200, { item });
+    } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
+  if (req.method === 'DELETE' && inventoryItemMatch) {
+    if (user.role !== 'admin') return json(res, 403, { error: 'Solo el administrador puede borrar' });
+    try {
+      await mutateDb(db => {
+        const index = db.inventoryItems.findIndex(row => row.id === inventoryItemMatch[1]);
+        if (index < 0) throw Object.assign(new Error('Artículo no encontrado'), { status: 404 });
+        db.inventoryItems.splice(index, 1);
+      });
+      return json(res, 200, { ok: true });
+    } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/inventory/movements') {
+    if (!['admin','employee'].includes(user.role)) return json(res, 403, { error: 'No autorizado' });
+    const input = await body(req), type = clean(input.type, 10), itemId = clean(input.itemId, 100), destination = clean(input.destination, 40), note = clean(input.note, 40);
+    if (!['entry','exit'].includes(type) || (type === 'exit' && !destination)) return json(res, 400, { error: 'Movimiento o destino inválido' });
+    try {
+      const movement = await mutateDb(db => {
+        const item = db.inventoryItems.find(row => row.id === itemId);
+        if (!item) throw Object.assign(new Error('Artículo no encontrado'), { status: 404 });
+        if (type === 'exit' && !item.active) throw Object.assign(new Error('El rollo ya está inactivo'), { status: 409 });
+        if (type === 'entry' && item.active) throw Object.assign(new Error('El rollo ya está activo'), { status: 409 });
+        const now = new Date().toISOString();
+        item.active = type === 'entry'; item.destino = type === 'exit' ? destination : ''; item.updatedAt = now;
+        const next = { id: crypto.randomUUID(), itemId, type, destination: type === 'exit' ? destination : '', note, actorId: user.id, actor: user.name, material: item.material, calibre: item.calibre, ancho: item.ancho, createdAt: now };
+        db.inventoryMovements.push(next); return next;
+      });
+      return json(res, 201, { movement });
+    } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/inventory/orders') {
+    if (user.role !== 'client') return json(res, 403, { error: 'Solo los clientes pueden enviar solicitudes' });
+    const input = await body(req), itemIds = [...new Set(Array.isArray(input.itemIds) ? input.itemIds.map(id => clean(id, 100)) : [])], comments = clean(input.comments, 500);
+    if (!itemIds.length) return json(res, 400, { error: 'Selecciona al menos un artículo' });
+    try {
+      const order = await mutateDb(db => {
+        if (itemIds.some(id => !db.inventoryItems.some(item => item.id === id && item.active))) throw Object.assign(new Error('Uno de los artículos ya no está disponible'), { status: 409 });
+        const next = { id: crypto.randomUUID(), customerId: user.id, customer: user.name, companyId: user.companyId || null, comments, itemIds, status: 'pending', createdAt: new Date().toISOString() };
+        db.purchaseRequests.push(next); return next;
+      });
+      await Promise.all(readDb().users.filter(account => account.role === 'admin' && account.active).map(account => notifyUser(account.id, { title: 'Nueva solicitud de inventario', body: `${user.name} seleccionó ${itemIds.length} artículo(s)`, url: '/#inventory' })));
+      return json(res, 201, { order });
+    } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
+
+  const inventoryOrderMatch = url.pathname.match(/^\/api\/inventory\/orders\/([^/]+)$/);
+  if (req.method === 'PATCH' && inventoryOrderMatch) {
+    if (user.role !== 'admin') return json(res, 403, { error: 'Solo el administrador puede actualizar solicitudes' });
+    const status = clean((await body(req)).status, 20), allowed = ['pending','review','approved','rejected','completed'];
+    if (!allowed.includes(status)) return json(res, 400, { error: 'Estado inválido' });
+    try {
+      const order = await mutateDb(db => { const found = db.purchaseRequests.find(row => row.id === inventoryOrderMatch[1]); if (!found) throw Object.assign(new Error('Solicitud no encontrada'), { status: 404 }); found.status = status; found.updatedAt = new Date().toISOString(); return found; });
+      return json(res, 200, { order });
+    } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/inventory/import') {
+    if (!['admin','employee'].includes(user.role)) return json(res, 403, { error: 'No autorizado para importar' });
+    try {
+      const input = await body(req), fileName = clean(input.fileName, 240), encoded = String(input.content || '');
+      if (!fileName || !encoded || encoded.length > 10_000_000) return json(res, 400, { error: 'Archivo inválido o demasiado grande' });
+      const buffer = Buffer.from(encoded, 'base64'), fileHash = crypto.createHash('sha256').update(buffer).digest('hex'), workbook = XLSX.read(buffer, { type: 'buffer' });
+      const result = await mutateDb(db => {
+        let imported = 0, skipped = 0; const sheets = [];
+        for (const sheetName of workbook.SheetNames) {
+          if (db.inventoryImports.some(record => record.fileHash === fileHash && record.sheetName === sheetName)) { sheets.push({ sheetName, duplicate: true }); continue; }
+          const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' }).slice(0, 10000);
+          let sheetImported = 0, sheetSkipped = 0;
+          for (const row of rows) {
+            const lower = Object.fromEntries(Object.entries(row).map(([key,value]) => [key.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''), value]));
+            try {
+              const values = validatedInventoryItem({ material: lower.material, calibre: lower.calibre, ancho: lower.ancho, peso: lower.peso, gramaje: lower.gramaje, ubicacion: lower.ubicacion, id: lower.id, observacion: lower.observacion, destino: lower.destino });
+              const rowHash = inventoryRowHash(values);
+              if ((values.externalId && db.inventoryItems.some(item => item.externalId.toLowerCase() === values.externalId.toLowerCase())) || db.inventoryItems.some(item => item.rowHash === rowHash)) { sheetSkipped++; continue; }
+              const now = new Date().toISOString(); db.inventoryItems.push({ id: crypto.randomUUID(), ...values, active: true, rowHash, createdAt: now, updatedAt: now }); sheetImported++;
+            } catch { sheetSkipped++; }
+          }
+          db.inventoryImports.push({ id: crypto.randomUUID(), fileName, fileHash, sheetName, importedRows: sheetImported, skippedRows: sheetSkipped, importedBy: user.name, importedAt: new Date().toISOString() });
+          imported += sheetImported; skipped += sheetSkipped; sheets.push({ sheetName, imported: sheetImported, skipped: sheetSkipped });
+        }
+        if (sheets.length && sheets.every(sheet => sheet.duplicate)) throw Object.assign(new Error('Este archivo ya fue importado'), { status: 409 });
+        return { imported, skipped, sheets };
+      });
+      return json(res, 201, result);
+    } catch (error) { return json(res, error.status || 400, { error: error.message || 'No se pudo leer el archivo' }); }
+  }
+
+  if(user.role==='client'&&!url.pathname.startsWith('/api/chat/')&&!url.pathname.startsWith('/api/companies')&&!url.pathname.startsWith('/api/inventory'))return json(res,403,{error:'Los clientes solo tienen acceso a su empresa e inventario'});
 
   if (req.method === 'GET' && url.pathname === '/api/users') {
     const allUsers = readDb().users;
