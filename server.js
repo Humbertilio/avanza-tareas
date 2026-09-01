@@ -234,8 +234,7 @@ async function api(req, res, url) {
 
   if (req.method === 'GET' && url.pathname === '/api/admin/backup') {
     if (user.role !== 'admin') return json(res, 403, { error: 'Solo el administrador puede descargar el respaldo' });
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    return json(res, 200, readDb(), { 'Content-Disposition': `attachment; filename="avanza-datos-${stamp}.json"`, 'Cache-Control': 'no-store' });
+    return json(res, 200, readDb(), { 'Cache-Control': 'no-store' });
   }
 
   if (req.method === 'GET' && url.pathname === '/api/push/public-key') return json(res, 200, { publicKey: PUSH_PUBLIC_KEY });
