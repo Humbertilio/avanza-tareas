@@ -12,7 +12,7 @@ const DATA_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'database.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const SESSION_HOURS = 12;
-const TASK_RETENTION_MS = Number(process.env.TASK_RETENTION_MS || 0);
+const TASK_RETENTION_MS = Number(process.env.TASK_RETENTION_MS || 48 * 60 * 60 * 1000);
 const STATUSES = [0, 25, 50, 75, 100];
 const ROLES = ['admin', 'employee', 'client'];
 const sessions = new Map();
@@ -198,7 +198,6 @@ async function notifyUser(userId, payload) {
 }
 
 async function purgeExpiredTasks() {
-  if (TASK_RETENTION_MS <= 0) return;
   const cutoff = Date.now() - TASK_RETENTION_MS;
   const expired=task=>task.progress===100&&task.completedAt&&new Date(task.completedAt).getTime()<=cutoff;
   const current=readDb(),hasExpired=current.tasks.some(expired)||(current.machineTasks||[]).some(expired);
@@ -231,12 +230,6 @@ async function api(req, res, url) {
   if (!user) return;
 
   if (req.method === 'GET' && url.pathname === '/api/me') return json(res, 200, { user: publicUser(user) });
-
-  if (req.method === 'GET' && url.pathname === '/api/admin/backup') {
-    if (user.role !== 'admin') return json(res, 403, { error: 'Solo el administrador puede descargar el respaldo' });
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    return json(res, 200, readDb(), { 'Content-Disposition': `attachment; filename="avanza-datos-${stamp}.json"`, 'Cache-Control': 'no-store' });
-  }
 
   if (req.method === 'GET' && url.pathname === '/api/push/public-key') return json(res, 200, { publicKey: PUSH_PUBLIC_KEY });
 
