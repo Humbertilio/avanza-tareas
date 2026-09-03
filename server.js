@@ -200,12 +200,11 @@ async function sendDirectSystemMessage(sender, recipientId, text, notificationBo
   await notifyUser(recipientId,{ title: `Nueva tarea de ${sender.name}`, body: notificationBody, url: `/#chat/${result.conversationId}`, badgeCount });
   return payload;
 }
-function assignmentMessage(task, senderName, heading = 'Nueva tarea asignada') {
-  const [year,month,day] = task.dueDate.split('-');
-  return `${heading}\n\nTarea: ${task.title}\nDescripción: ${task.description || 'Sin descripción'}\nAsignada por: ${senderName}\nFecha de finalización: ${day}/${month}/${year}`;
+function assignmentMessage(task, status = 'Asignada') {
+  return `Título: ${task.title}\nStatus: ${status}`;
 }
-function completionMessage(task, senderName, heading = 'Tarea finalizada') {
-  return `${heading}\n\nTarea: ${task.title}\nDescripción: ${task.description || 'Sin descripción'}\nFinalizada por: ${senderName}\nFecha y hora: ${new Date().toLocaleString('es')}`;
+function completionMessage(task, status = 'Finalizada') {
+  return `Título: ${task.title}\nStatus: ${status}`;
 }
 
 async function notifyUser(userId, payload) {
@@ -605,7 +604,7 @@ async function api(req, res, url) {
         const next = { id: crypto.randomUUID(), title, description, notes: [], creatorId: user.id, assigneeId, dueDate, progress: 0, acknowledgedAt: null, createdAt: now, updatedAt: now, completedAt: null };
         db.tasks.push(next); return next;
       });
-      await sendDirectSystemMessage(user, task.assigneeId, assignmentMessage(task,user.name), `${task.title} · Finaliza ${task.dueDate}`);
+      await sendDirectSystemMessage(user, task.assigneeId, assignmentMessage(task), `${task.title} · Finaliza ${task.dueDate}`);
       return json(res, 201, { task });
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
   }
@@ -626,7 +625,7 @@ async function api(req, res, url) {
         if (reassigned) found.acknowledgedAt = null;
         return { task: found, reassigned };
       });
-      if (result.reassigned) await sendDirectSystemMessage(user, result.task.assigneeId, assignmentMessage(result.task,user.name,'Tarea reasignada'), `${result.task.title} · Finaliza ${result.task.dueDate}`);
+      if (result.reassigned) await sendDirectSystemMessage(user, result.task.assigneeId, assignmentMessage(result.task,'Reasignada'), `${result.task.title} · Finaliza ${result.task.dueDate}`);
       return json(res, 200, { task: result.task });
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
   }
@@ -679,7 +678,7 @@ async function api(req, res, url) {
         found.progress = progress; found.updatedAt = new Date().toISOString(); found.completedAt = progress === 100 ? (found.completedAt || found.updatedAt) : null;
         return { task: found, justCompleted };
       });
-      if(result.justCompleted)await sendDirectSystemMessage(user,result.task.creatorId,completionMessage(result.task,user.name),`${result.task.title} fue finalizada`,{systemType:'task_completed',relatedTaskType:'employee',relatedTaskId:result.task.id});
+      if(result.justCompleted)await sendDirectSystemMessage(user,result.task.creatorId,completionMessage(result.task),`${result.task.title} fue finalizada`,{systemType:'task_completed',relatedTaskType:'employee',relatedTaskId:result.task.id});
       return json(res, 200, { task: result.task });
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
   }
@@ -759,7 +758,7 @@ async function api(req, res, url) {
         db.machineTasks ||= []; db.machineTasks.push(next); return next;
       });
       const machineName=readDb().machines.find(item=>item.id===task.machineId)?.name||'Maquinaria';
-      await sendDirectSystemMessage(user,task.assigneeId,assignmentMessage(task,user.name,`Nueva tarea de maquinaria: ${machineName}`),`${machineName}: ${task.title} · Finaliza ${task.dueDate}`);
+      await sendDirectSystemMessage(user,task.assigneeId,assignmentMessage(task),`${machineName}: ${task.title} · Finaliza ${task.dueDate}`);
       return json(res, 201, { task });
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
   }
@@ -788,7 +787,7 @@ async function api(req, res, url) {
   }
   if (machineTaskAction && req.method === 'PATCH' && machineTaskAction[2] === 'status') {
     const input=await body(req),progress=Number(input.progress); if(progress!==100)return json(res,400,{error:'El único estado permitido es Finalizada'});
-    try { const result=await mutateDb(db=>{const found=(db.machineTasks||[]).find(item=>item.id===machineTaskAction[1]);if(!found)throw Object.assign(new Error('Tarea no encontrada'),{status:404});if(found.assigneeId!==user.id)throw Object.assign(new Error('Solo el responsable puede cambiar el estado'),{status:403});const justCompleted=found.progress!==100;found.progress=progress;found.updatedAt=new Date().toISOString();found.completedAt ||= found.updatedAt;return{task:found,justCompleted};});if(result.justCompleted)await sendDirectSystemMessage(user,result.task.creatorId,completionMessage(result.task,user.name,'Tarea de maquinaria finalizada'),`${result.task.title} fue finalizada`,{systemType:'task_completed',relatedTaskType:'machine',relatedTaskId:result.task.id});return json(res,200,{task:result.task}); }
+    try { const result=await mutateDb(db=>{const found=(db.machineTasks||[]).find(item=>item.id===machineTaskAction[1]);if(!found)throw Object.assign(new Error('Tarea no encontrada'),{status:404});if(found.assigneeId!==user.id)throw Object.assign(new Error('Solo el responsable puede cambiar el estado'),{status:403});const justCompleted=found.progress!==100;found.progress=progress;found.updatedAt=new Date().toISOString();found.completedAt ||= found.updatedAt;return{task:found,justCompleted};});if(result.justCompleted)await sendDirectSystemMessage(user,result.task.creatorId,completionMessage(result.task),`${result.task.title} fue finalizada`,{systemType:'task_completed',relatedTaskType:'machine',relatedTaskId:result.task.id});return json(res,200,{task:result.task}); }
     catch(error){return json(res,error.status||500,{error:error.message});}
   }
   if (machineTaskAction && req.method === 'POST' && machineTaskAction[2] === 'notes') {
