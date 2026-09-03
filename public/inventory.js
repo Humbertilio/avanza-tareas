@@ -1,7 +1,7 @@
 (() => {
   const fields = ['material','calibre','ancho','peso','gramaje','ubicacion','externalId','observacion','destino'];
   const labels = {material:'Material',calibre:'Calibre',ancho:'Ancho',peso:'Peso',gramaje:'Gramaje',ubicacion:'Ubicación',externalId:'ID',observacion:'Observación',destino:'Destino'};
-  const widths = {material:64,calibre:62,ancho:62,peso:70,gramaje:72,ubicacion:72,externalId:78,observacion:120,destino:120};
+  const widths = {material:4,calibre:4,ancho:4,peso:5,gramaje:3,ubicacion:3,externalId:7,observacion:15,destino:15};
   const clientFields = ['material','calibre','ancho','peso','gramaje','observacion','externalId'];
   const state = {items:[],movements:[],imports:[],orders:[],tab:'items',filters:{},sort:{key:'material',dir:1},selected:new Set(),clickTimer:null,longPressTimer:null,longPressTriggered:false};
   const root = () => document.querySelector('#inventoryRoot');
@@ -39,7 +39,7 @@
 
   function renderItems() {
     const keys = me.role === 'client' ? clientFields : fields, items = visibleItems(), content = root().querySelector('#inventoryContent');
-    content.innerHTML = `<div class="inventory-count">${items.length}</div><div class="inventory-sheet"><table><thead><tr>${keys.map(key=>`<th data-sort="${key}" style="width:${widths[key]}px;min-width:${widths[key]}px" title="Ordenar">${labels[key]} ${state.sort.key===key?(state.sort.dir===1?'▲':'▼'):''}</th>`).join('')}</tr><tr class="inventory-filters">${keys.map(key=>`<th><input data-filter="${key}" value="${safe(state.filters[key]||'')}" aria-label="Filtrar ${labels[key]}"></th>`).join('')}</tr></thead><tbody>${items.map(item=>`<tr data-item="${item.id}" class="${item.active?'':'inactive'} ${state.selected.has(item.id)?'selected':''}">${keys.map(key=>`<td title="${safe(item[key]??'')}">${display(item[key])}</td>`).join('')}</tr>`).join('')}${me.role!=='client'?`<tr id="inventoryNewRow" class="inventory-new-row">${keys.map((key,index)=>`<td>${index===0?'＋ Nuevo':''}</td>`).join('')}</tr>`:''}</tbody></table></div>`;
+    content.innerHTML = `<div class="inventory-count">${items.length}</div><div class="inventory-sheet"><table><thead><tr>${keys.map(key=>`<th data-sort="${key}" style="width:${widths[key]}ch;min-width:${widths[key]}ch" title="Ordenar">${labels[key]} ${state.sort.key===key?(state.sort.dir===1?'▲':'▼'):''}</th>`).join('')}</tr><tr class="inventory-filters">${keys.map(key=>`<th><input data-filter="${key}" value="${safe(state.filters[key]||'')}" aria-label="Filtrar ${labels[key]}"></th>`).join('')}</tr></thead><tbody>${items.map(item=>`<tr data-item="${item.id}" class="${item.active?'':'inactive'} ${state.selected.has(item.id)?'selected':''}">${keys.map(key=>`<td title="${safe(item[key]??'')}">${display(item[key])}</td>`).join('')}</tr>`).join('')}${me.role!=='client'?`<tr id="inventoryNewRow" class="inventory-new-row">${keys.map((key,index)=>`<td>${index===0?'＋ Nuevo':''}</td>`).join('')}</tr>`:''}</tbody></table></div>`;
     content.querySelectorAll('[data-sort]').forEach(th=>th.addEventListener('click',()=>{const key=th.dataset.sort;if(state.sort.key===key)state.sort.dir*=-1;else state.sort={key,dir:1};renderItems();}));
     content.querySelectorAll('[data-filter]').forEach(input=>input.addEventListener('input',()=>{state.filters[input.dataset.filter]=input.value;renderItems();const next=root().querySelector(`[data-filter="${input.dataset.filter}"]`);next?.focus();next?.setSelectionRange(input.value.length,input.value.length);}));
     content.querySelectorAll('[data-item]').forEach(row=>{

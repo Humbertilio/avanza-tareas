@@ -2,7 +2,7 @@
 body:has(#inventoryView:not(.hidden)) .content>header{display:none}
 .inventory-count{height:20px;text-align:right;font-size:10px;color:var(--muted)}
 .inventory-sheet{height:calc(100dvh - 150px);overflow:auto;border:1px solid #9e9e9e;background:#fff}
-.inventory-sheet table{width:max-content;min-width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px}
+.inventory-sheet table{width:max-content;border-collapse:collapse;table-layout:fixed;font-size:11px}
 .inventory-sheet th,.inventory-sheet td{height:22px;max-width:120px;padding:2px 4px;border-right:1px solid #b7b7b7;border-bottom:1px solid #d7d7d7;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .inventory-sheet thead tr:first-child th{position:sticky;top:0;z-index:4;background:#107c41;color:#fff;cursor:pointer;resize:horizontal;overflow:hidden}
 .inventory-sheet .inventory-filters th{position:sticky;top:22px;z-index:3;background:#e2f0d9;padding:1px}
