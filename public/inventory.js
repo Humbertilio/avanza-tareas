@@ -3,7 +3,7 @@
   const labels = {material:'MAT',calibre:'CAL',ancho:'ANC',peso:'PESO',gramaje:'GSM',ubicacion:'UBI',externalId:'ID',observacion:'Observación',destino:'Destino'};
   const widths = {material:4,calibre:4,ancho:4,peso:6,gramaje:3,ubicacion:3,externalId:7,observacion:15,destino:15};
   const clientFields = ['material','calibre','ancho','peso','gramaje','observacion','externalId'];
-  const state = {items:[],movements:[],imports:[],orders:[],tab:'items',filters:{},sort:{key:'material',dir:1},selected:new Set(),clickTimer:null,longPressTimer:null,longPressTriggered:false};
+  const state = {items:[],materials:[],movements:[],imports:[],orders:[],tab:'items',filters:{},sort:{key:'material',dir:1},selected:new Set(),clickTimer:null,longPressTimer:null,longPressTriggered:false};
   const root = () => document.querySelector('#inventoryRoot');
   const safe = value => escapeHtml(String(value ?? ''));
   const display = value => value === null || value === undefined || value === '' ? '—' : safe(value);
@@ -27,12 +27,13 @@
   function render() {
     const tabs = me.role === 'client' ? [['items','Inventario'],['orders','Solicitudes']] : me.role === 'admin' ? [['items','Inventario'],['movements','Movimientos'],['orders','Solicitudes'],['imports','Importaciones']] : [['items','Inventario'],['movements','Movimientos'],['imports','Importaciones']];
     if (!tabs.some(([key]) => key === state.tab)) state.tab = 'items';
-    root().innerHTML = `<div id="inventoryContent"></div><div class="inventory-bottom"><div class="inventory-tabs">${tabs.map(([key,label])=>`<button data-inv-tab="${key}" class="${state.tab===key?'active':''}">${label}</button>`).join('')}</div>${state.tab==='items'&&me.role!=='client'?'<button id="inventoryImport">Importar</button><input id="inventoryFile" type="file" accept=".xlsx,.xls" hidden>':''}${state.tab==='items'&&me.role==='client'&&state.selected.size?`<button id="inventoryCart">Comprar (${state.selected.size})</button>`:''}</div>`;
+    root().innerHTML = `<div id="inventoryContent"></div><div class="inventory-bottom"><div class="inventory-tabs">${tabs.map(([key,label])=>`<button data-inv-tab="${key}" class="${state.tab===key?'active':''}">${label}</button>`).join('')}</div>${state.tab==='items'&&me.role!=='client'?'<button id="inventorySave">Guardar</button><button id="inventoryImport">Importar</button><input id="inventoryFile" type="file" accept=".xlsx,.xls" hidden>':''}${state.tab==='items'&&me.role==='client'&&state.selected.size?`<button id="inventoryCart">Comprar (${state.selected.size})</button>`:''}</div>`;
     if(state.tab==='items') renderItems();
     if(state.tab==='movements') renderMovements();
     if(state.tab==='orders') renderOrders();
     if(state.tab==='imports') renderImports();
     root().querySelectorAll('[data-inv-tab]').forEach(button => button.addEventListener('click',()=>{state.tab=button.dataset.invTab;render();}));
+    root().querySelector('#inventorySave')?.addEventListener('click',addInlineItem);
     root().querySelector('#inventoryImport')?.addEventListener('click',()=>root().querySelector('#inventoryFile').click());
     root().querySelector('#inventoryFile')?.addEventListener('change',event=>importExcel(event.target.files[0]));
     root().querySelector('#inventoryCart')?.addEventListener('click',openCart);
@@ -61,11 +62,15 @@
       }
     });
     content.querySelectorAll('[data-new-field]').forEach(input=>input.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();addInlineItem();}}));
+    const materialInput=content.querySelector('[data-new-field="material"]');
+    materialInput?.addEventListener('click',openMaterialPicker);
+    materialInput?.addEventListener('focus',openMaterialPicker);
   }
 
   function modal(html) { let node=document.querySelector('#inventoryModal');if(!node){node=document.createElement('div');node.id='inventoryModal';node.className='modal';document.body.appendChild(node);}node.innerHTML=html;node.classList.remove('hidden');node.addEventListener('click',event=>{if(event.target===node)closeModal();},{once:true});return node; }
   function closeModal(){document.querySelector('#inventoryModal')?.classList.add('hidden');}
   async function addInlineItem(){const row=root().querySelector('#inventoryNewRow');if(!row||row.dataset.saving)return;const inputs=[...row.querySelectorAll('[data-new-field]')],payload=Object.fromEntries(inputs.map(input=>[input.dataset.newField,input.value]));if(!Object.values(payload).some(value=>value.trim()))return;row.dataset.saving='1';try{await request('/api/inventory/items',{method:'POST',body:JSON.stringify(payload)});await load();toast('Artículo agregado');}catch(error){delete row.dataset.saving;toast(error.message);inputs[0]?.focus();}}
+  function openMaterialPicker(){if(document.querySelector('#materialPicker:not(.hidden)'))return;let picker=document.querySelector('#materialPicker');if(!picker){picker=document.createElement('div');picker.id='materialPicker';picker.className='modal';document.body.appendChild(picker);}picker.innerHTML=`<div class="modal-card material-picker"><div class="modal-heading"><h2>Material</h2><button type="button" data-close>×</button></div><input data-material-search placeholder="Buscar"><div class="material-list">${state.materials.map(item=>`<button type="button" data-material="${safe(item.material)}"><b>${safe(item.material)}</b><span>${safe(item.descripcion)}</span></button>`).join('')||'<p>Sin materiales</p>'}</div></div>`;picker.classList.remove('hidden');const close=()=>picker.classList.add('hidden');picker.querySelector('[data-close]').addEventListener('click',close);picker.onclick=event=>{if(event.target===picker)close();};picker.querySelectorAll('[data-material]').forEach(button=>button.addEventListener('click',()=>{const input=root().querySelector('[data-new-field="material"]');if(input)input.value=button.dataset.material;close();root().querySelector('[data-new-field="calibre"]')?.focus();}));picker.querySelector('[data-material-search]').addEventListener('input',event=>{const text=event.target.value.toLowerCase();picker.querySelectorAll('[data-material]').forEach(button=>button.classList.toggle('hidden',!button.textContent.toLowerCase().includes(text)));});picker.querySelector('[data-material-search]').focus();}
   async function deleteItem(item){if(!confirm('¿Borrar este artículo?'))return;try{await request(`/api/inventory/items/${item.id}`,{method:'DELETE'});closeModal();await load();toast('Artículo borrado');}catch(error){toast(error.message);}}
   function itemInputs(item={}) { return fields.map(key=>`<label>${labels[key]}<input name="${key}" value="${safe(item[key]??'')}" ${key==='material'?'required':''} maxlength="${{material:4,ubicacion:6,externalId:7,observacion:40,destino:40}[key]||20}" inputmode="${['calibre','peso','gramaje'].includes(key)?'numeric':key==='ancho'?'decimal':'text'}"></label>`).join(''); }
 

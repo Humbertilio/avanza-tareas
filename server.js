@@ -13,6 +13,7 @@ const DATA_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'database.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const PRODUCTS_SEED_FILE = path.join(__dirname, 'seed', 'products.json');
+const MATERIALS_FILE = path.join(__dirname, 'seed', 'materials.json');
 const SESSION_HOURS = 12;
 const TASK_RETENTION_MS = Number(process.env.TASK_RETENTION_MS || 48 * 60 * 60 * 1000);
 const STATUSES = [0, 25, 50, 75, 100];
@@ -182,6 +183,11 @@ function validatedProduct(input) {
   if (!div || !product) throw Object.assign(new Error('DIV y Producto son obligatorios'), { status: 400 });
   return { div, product, price1: productPrice(input.price1), price2: productPrice(input.price2), price3: productPrice(input.price3) };
 }
+function inventoryMaterials() {
+  if (!fs.existsSync(MATERIALS_FILE)) return [];
+  try { return JSON.parse(fs.readFileSync(MATERIALS_FILE, 'utf8')).map(item=>({material:clean(item.material,4).toUpperCase(),descripcion:clean(item.descripcion,100)})).filter(item=>item.material); }
+  catch { return []; }
+}
 function requireUser(req, res) {
   const user = currentUser(req);
   if (!user) json(res, 401, { error: 'Debes iniciar sesión' });
@@ -322,6 +328,7 @@ async function api(req, res, url) {
     const orders = user.role === 'admin' ? (db.purchaseRequests || []) : user.role === 'client' ? (db.purchaseRequests || []).filter(item => item.customerId === user.id) : [];
     return json(res, 200, {
       items,
+      materials: user.role === 'client' ? [] : inventoryMaterials(),
       movements: user.role === 'client' ? [] : (db.inventoryMovements || []).slice().sort((a,b) => b.createdAt.localeCompare(a.createdAt)),
       imports: user.role === 'client' ? [] : (db.inventoryImports || []).slice().sort((a,b) => b.importedAt.localeCompare(a.importedAt)),
       orders: orders.slice().sort((a,b) => b.createdAt.localeCompare(a.createdAt))
