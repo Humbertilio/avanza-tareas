@@ -1,8 +1,9 @@
 (() => {
   const fields = ['material','calibre','ancho','peso','gramaje','ubicacion','externalId','observacion','destino'];
   const labels = {material:'Material',calibre:'Calibre',ancho:'Ancho',peso:'Peso',gramaje:'Gramaje',ubicacion:'Ubicación',externalId:'ID',observacion:'Observación',destino:'Destino'};
+  const widths = {material:64,calibre:62,ancho:62,peso:70,gramaje:72,ubicacion:72,externalId:78,observacion:120,destino:120};
   const clientFields = ['material','calibre','ancho','peso','gramaje','observacion','externalId'];
-  const state = {items:[],movements:[],imports:[],orders:[],tab:'items',filters:{},sort:{key:'material',dir:1},selected:new Set(),clickTimer:null};
+  const state = {items:[],movements:[],imports:[],orders:[],tab:'items',filters:{},sort:{key:'material',dir:1},selected:new Set(),clickTimer:null,longPressTimer:null,longPressTriggered:false};
   const root = () => document.querySelector('#inventoryRoot');
   const safe = value => escapeHtml(String(value ?? ''));
   const display = value => value === null || value === undefined || value === '' ? '—' : safe(value);
@@ -25,41 +26,50 @@
   function render() {
     const tabs = me.role === 'client' ? [['items','Inventario'],['orders','Solicitudes']] : me.role === 'admin' ? [['items','Inventario'],['movements','Movimientos'],['orders','Solicitudes'],['imports','Importaciones']] : [['items','Inventario'],['movements','Movimientos'],['imports','Importaciones']];
     if (!tabs.some(([key]) => key === state.tab)) state.tab = 'items';
-    root().innerHTML = `<div class="inventory-tabs">${tabs.map(([key,label])=>`<button data-inv-tab="${key}" class="${state.tab===key?'active':''}">${label}</button>`).join('')}</div><div id="inventoryContent"></div>`;
-    root().querySelectorAll('[data-inv-tab]').forEach(button => button.addEventListener('click',()=>{state.tab=button.dataset.invTab;render();}));
+    root().innerHTML = `<div id="inventoryContent"></div><div class="inventory-bottom"><div class="inventory-tabs">${tabs.map(([key,label])=>`<button data-inv-tab="${key}" class="${state.tab===key?'active':''}">${label}</button>`).join('')}</div>${state.tab==='items'&&me.role!=='client'?'<button id="inventoryImport">Importar</button><input id="inventoryFile" type="file" accept=".xlsx,.xls" hidden>':''}${state.tab==='items'&&me.role==='client'&&state.selected.size?`<button id="inventoryCart">Comprar (${state.selected.size})</button>`:''}</div>`;
     if(state.tab==='items') renderItems();
     if(state.tab==='movements') renderMovements();
     if(state.tab==='orders') renderOrders();
     if(state.tab==='imports') renderImports();
+    root().querySelectorAll('[data-inv-tab]').forEach(button => button.addEventListener('click',()=>{state.tab=button.dataset.invTab;render();}));
+    root().querySelector('#inventoryImport')?.addEventListener('click',()=>root().querySelector('#inventoryFile').click());
+    root().querySelector('#inventoryFile')?.addEventListener('change',event=>importExcel(event.target.files[0]));
+    root().querySelector('#inventoryCart')?.addEventListener('click',openCart);
   }
 
   function renderItems() {
     const keys = me.role === 'client' ? clientFields : fields, items = visibleItems(), content = root().querySelector('#inventoryContent');
-    content.innerHTML = `<div class="inventory-toolbar">${me.role!=='client'?'<button id="inventoryImport">Importar Excel</button>':''}<span>${items.length}</span>${me.role==='client'&&state.selected.size?`<button id="inventoryCart">Seleccionados: ${state.selected.size}</button>`:''}<input id="inventoryFile" type="file" accept=".xlsx,.xls" hidden></div><div class="inventory-sheet"><table><thead><tr>${keys.map(key=>`<th data-sort="${key}" title="Ordenar">${labels[key]} ${state.sort.key===key?(state.sort.dir===1?'▲':'▼'):''}</th>`).join('')}</tr><tr class="inventory-filters">${keys.map(key=>`<th><input data-filter="${key}" value="${safe(state.filters[key]||'')}" aria-label="Filtrar ${labels[key]}"></th>`).join('')}</tr></thead><tbody>${items.map(item=>`<tr data-item="${item.id}" class="${item.active?'':'inactive'} ${state.selected.has(item.id)?'selected':''}">${keys.map(key=>`<td>${display(item[key])}</td>`).join('')}</tr>`).join('')}${me.role!=='client'?`<tr id="inventoryNewRow" class="inventory-new-row">${keys.map((key,index)=>`<td>${index===0?'＋ Nuevo artículo':''}</td>`).join('')}</tr>`:''}</tbody></table></div>`;
+    content.innerHTML = `<div class="inventory-count">${items.length}</div><div class="inventory-sheet"><table><thead><tr>${keys.map(key=>`<th data-sort="${key}" style="width:${widths[key]}px;min-width:${widths[key]}px" title="Ordenar">${labels[key]} ${state.sort.key===key?(state.sort.dir===1?'▲':'▼'):''}</th>`).join('')}</tr><tr class="inventory-filters">${keys.map(key=>`<th><input data-filter="${key}" value="${safe(state.filters[key]||'')}" aria-label="Filtrar ${labels[key]}"></th>`).join('')}</tr></thead><tbody>${items.map(item=>`<tr data-item="${item.id}" class="${item.active?'':'inactive'} ${state.selected.has(item.id)?'selected':''}">${keys.map(key=>`<td title="${safe(item[key]??'')}">${display(item[key])}</td>`).join('')}</tr>`).join('')}${me.role!=='client'?`<tr id="inventoryNewRow" class="inventory-new-row">${keys.map((key,index)=>`<td>${index===0?'＋ Nuevo':''}</td>`).join('')}</tr>`:''}</tbody></table></div>`;
     content.querySelectorAll('[data-sort]').forEach(th=>th.addEventListener('click',()=>{const key=th.dataset.sort;if(state.sort.key===key)state.sort.dir*=-1;else state.sort={key,dir:1};renderItems();}));
     content.querySelectorAll('[data-filter]').forEach(input=>input.addEventListener('input',()=>{state.filters[input.dataset.filter]=input.value;renderItems();const next=root().querySelector(`[data-filter="${input.dataset.filter}"]`);next?.focus();next?.setSelectionRange(input.value.length,input.value.length);}));
     content.querySelectorAll('[data-item]').forEach(row=>{
+      const item=state.items.find(x=>x.id===row.dataset.item);if(!item)return;
       row.addEventListener('click',()=>{
-        const item=state.items.find(x=>x.id===row.dataset.item); if(!item)return;
-        if(me.role==='client'){state.selected.has(item.id)?state.selected.delete(item.id):state.selected.add(item.id);renderItems();return;}
+        if(state.longPressTriggered){state.longPressTriggered=false;return;}
+        if(me.role==='client'){state.selected.has(item.id)?state.selected.delete(item.id):state.selected.add(item.id);render();return;}
         clearTimeout(state.clickTimer);state.clickTimer=setTimeout(()=>openMovement(item),240);
       });
-      if(me.role!=='client')row.addEventListener('dblclick',()=>{clearTimeout(state.clickTimer);const item=state.items.find(x=>x.id===row.dataset.item);if(item)openItem(item);});
+      if(me.role!=='client')row.addEventListener('dblclick',()=>{clearTimeout(state.clickTimer);openItem(item);});
+      if(me.role==='admin'){
+        let startX=0,startY=0;
+        row.addEventListener('pointerdown',event=>{if(event.pointerType!=='touch')return;startX=event.clientX;startY=event.clientY;state.longPressTriggered=false;clearTimeout(state.longPressTimer);state.longPressTimer=setTimeout(()=>{state.longPressTriggered=true;clearTimeout(state.clickTimer);deleteItem(item);},2000);});
+        row.addEventListener('pointermove',event=>{if(Math.abs(event.clientX-startX)>10||Math.abs(event.clientY-startY)>10)clearTimeout(state.longPressTimer);});
+        ['pointerup','pointercancel','pointerleave'].forEach(type=>row.addEventListener(type,()=>clearTimeout(state.longPressTimer)));
+        row.addEventListener('contextmenu',event=>{if(state.longPressTriggered)event.preventDefault();});
+      }
     });
     content.querySelector('#inventoryNewRow')?.addEventListener('click',()=>openItem());
-    content.querySelector('#inventoryImport')?.addEventListener('click',()=>content.querySelector('#inventoryFile').click());
-    content.querySelector('#inventoryFile')?.addEventListener('change',event=>importExcel(event.target.files[0]));
-    content.querySelector('#inventoryCart')?.addEventListener('click',openCart);
   }
 
   function modal(html) { let node=document.querySelector('#inventoryModal');if(!node){node=document.createElement('div');node.id='inventoryModal';node.className='modal';document.body.appendChild(node);}node.innerHTML=html;node.classList.remove('hidden');node.addEventListener('click',event=>{if(event.target===node)closeModal();},{once:true});return node; }
   function closeModal(){document.querySelector('#inventoryModal')?.classList.add('hidden');}
+  async function deleteItem(item){if(!confirm('¿Borrar este artículo?'))return;try{await request(`/api/inventory/items/${item.id}`,{method:'DELETE'});closeModal();await load();toast('Artículo borrado');}catch(error){toast(error.message);}}
   function itemInputs(item={}) { return fields.map(key=>`<label>${labels[key]}<input name="${key}" value="${safe(item[key]??'')}" ${key==='material'?'required':''} maxlength="${{material:4,ubicacion:6,externalId:7,observacion:40,destino:40}[key]||20}" inputmode="${['calibre','peso','gramaje'].includes(key)?'numeric':key==='ancho'?'decimal':'text'}"></label>`).join(''); }
 
   function openItem(item=null) {
     const node=modal(`<form class="modal-card inventory-form"><div class="modal-heading"><h2>${item?'Editar':'Nuevo'}</h2><button type="button" data-close>×</button></div><div class="inventory-fields">${itemInputs(item||{})}</div><div class="modal-actions">${item&&me.role==='admin'?'<button type="button" class="inventory-delete">Borrar</button>':'<button type="button" data-close>Cancelar</button>'}<button class="primary">Guardar</button></div><p class="formMessage"></p></form>`);
     node.querySelectorAll('[data-close]').forEach(x=>x.addEventListener('click',closeModal));
-    node.querySelector('.inventory-delete')?.addEventListener('click',async()=>{if(!confirm('¿Borrar este artículo?'))return;try{await request(`/api/inventory/items/${item.id}`,{method:'DELETE'});closeModal();await load();toast('Artículo borrado');}catch(error){node.querySelector('.formMessage').textContent=error.message;}});
+    node.querySelector('.inventory-delete')?.addEventListener('click',()=>deleteItem(item));
     node.querySelector('form').addEventListener('submit',async event=>{event.preventDefault();const form=event.target,msg=form.querySelector('.formMessage');try{await request(item?`/api/inventory/items/${item.id}`:'/api/inventory/items',{method:item?'PATCH':'POST',body:JSON.stringify(Object.fromEntries(new FormData(form)))});closeModal();await load();toast(item?'Artículo actualizado':'Artículo agregado');}catch(error){msg.textContent=error.message;}});
     node.querySelector('[name="material"]').focus();
   }
