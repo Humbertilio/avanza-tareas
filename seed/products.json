@@ -1,0 +1,2210 @@
+[
+  {
+    "id": "ebf8ad2f9bcd2be67164571d",
+    "div": "Agr",
+    "product": "Division Avicola",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "c0dd08bdb7bfa098eda0269c",
+    "div": "Agr",
+    "product": "Papel Kraft P/recibir pollitas",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "99babd9edfcabc32eb588464",
+    "div": "Agr",
+    "product": "Papel Periodico P/recibir pollitas",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "c5f0fad938d46cde3b63e416",
+    "div": "Agr",
+    "product": "Separadores de Huevo Peq",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "84e7e7b8f0d90f9a52b6135f",
+    "div": "Agr",
+    "product": "Separadores de Huevo Gde",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "b630d8c527245450b3a59659",
+    "div": "Alm",
+    "product": "Division Almacen Provisiones",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "06dbebc2b66aeb691ccec394",
+    "div": "Alm",
+    "product": "Fundas #2 Period",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "0ca8c680b5dbe24969854ff5",
+    "div": "Alm",
+    "product": "Fundas #4 Period",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "9360532fbeb4a2aeb710e962",
+    "div": "Alm",
+    "product": "Fundas #6 Period",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "e28839321033a41e8e179b00",
+    "div": "Alm",
+    "product": "Fundas #4 Kraft",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "78e854959916874b148f94c8",
+    "div": "Alm",
+    "product": "Fundas #6 Kraft",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "980e39fed6f80f7bc17edb52",
+    "div": "Alm",
+    "product": "Papel P/Colmado Kraft",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "8e349733a34e380dfe8b3b12",
+    "div": "Alm",
+    "product": "Papel P/Colmado Periodico",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "9cb89139e27387b99bd039dd",
+    "div": "Alm",
+    "product": "Jumbo 230 gr",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "364e8e591db5a356e4d4bb74",
+    "div": "Alm",
+    "product": "Jumbo 410 gr",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "51ca56d0ce44992ca26c4cbc",
+    "div": "Alm",
+    "product": "Jumbo 450 gr",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "ca9aef36cf511b9fbd1b75a5",
+    "div": "Alm",
+    "product": "Jumbo 530 gr",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "b877e68cca3026cbe3d0f78e",
+    "div": "Alm",
+    "product": "Jumbo 700 gr",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "3175c579da62b8e7f0c76b73",
+    "div": "Alm",
+    "product": "Toalla 450 gsm  350'",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "c7b4af39e9bd017693936822",
+    "div": "Alm",
+    "product": "Toalla 915 gsm  700'",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "e92f968440c6d92966b62536",
+    "div": "Alm",
+    "product": "Higienico 48/1  50gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "ecdad009e80b3a4a5fe456a7",
+    "div": "Alm",
+    "product": "Higienico 48/1  60gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "38670aba17863c30d1871e50",
+    "div": "Alm",
+    "product": "Higienico 48/1 70gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "017740ca967149f9f8ff5523",
+    "div": "Alm",
+    "product": "Higienico 48/1 90gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "cf869a9f53bf213368b6631d",
+    "div": "Alm",
+    "product": "Higienico 48/1 90gsm Impreso",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "6903275839818547a1ec251b",
+    "div": "Alm",
+    "product": "Servilletas Xcelent",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "8d6f5c1664eb6b649d958009",
+    "div": "Alm",
+    "product": "Servilletas GreenNap",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "76f12317719760f337dfa7e8",
+    "div": "Alm",
+    "product": "Servilletas 13x13",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "bd16d3ec7f286b613f37b476",
+    "div": "Alm",
+    "product": "Servilletas 50/60",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "b27fc031b047d658487c0f41",
+    "div": "Alm",
+    "product": "Servilletas 15x17 Diner",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "f40b32e5a6b997b121c736da",
+    "div": "Alm",
+    "product": "Servilletas 10x10 Coctail",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "dc26e67d6c95c0932b6fc09d",
+    "div": "Alm",
+    "product": "Servilletas Cfold",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "0355139b457a3622c8dc0ef2",
+    "div": "imp",
+    "product": "Division Imprenta",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "1f5cff08ca3e22f791a2fb91",
+    "div": "imp",
+    "product": "Bond 16 8½x11",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "2f356fc86fccf23cfb947776",
+    "div": "imp",
+    "product": "Bond 16 11x17",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "e5342fae3a36ebbeb3bd5e1d",
+    "div": "imp",
+    "product": "Bond 16 17x22",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "9500866fd024085df9061e6f",
+    "div": "imp",
+    "product": "Bond 16 22x34",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "f87f7797eb735c220a9b0ac9",
+    "div": "imp",
+    "product": "Bond 16 otro Tamano",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "2fc6bc40fe633ed4a44933e3",
+    "div": "imp",
+    "product": "Bond 20 8½x11 70 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "4972fe156a5ab65e43d6f9f8",
+    "div": "imp",
+    "product": "Bond 20 11x17  70 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "694aa974ae7f4327f229956e",
+    "div": "imp",
+    "product": "Bond 20 17x22  70 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "c053687c6b090f8cb5200829",
+    "div": "imp",
+    "product": "Bond 20 22x34  70 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "e4542e12d21b259a624bee5f",
+    "div": "imp",
+    "product": "Bond 20  70 gsm otro Tamano",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "e4e1cf2cfe1174b99ddde093",
+    "div": "imp",
+    "product": "Bond 20 8½x11 75 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "460171d1cad0e124fcce7fe7",
+    "div": "imp",
+    "product": "Bond 20 11x17  75 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "6a7673ac11da5c6eb326c970",
+    "div": "imp",
+    "product": "Bond 20 17x22  75 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "336ef20e9e999860865bd2f5",
+    "div": "imp",
+    "product": "Bond 20 22x34  75 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "05fffe9ab32124a775a00062",
+    "div": "imp",
+    "product": "Bond20  75 gsm otro Tamano",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "c183775c6546ca2a418b2532",
+    "div": "imp",
+    "product": "Bond 24 8½x11 90 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "722b6b3e3bec5e1f1242d209",
+    "div": "imp",
+    "product": "Bond 24 11x17  90 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "e06533343ecbcaa8b99203c4",
+    "div": "imp",
+    "product": "Bond 24 17x22  90 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "e0e80c787ff13057fa4c9ff9",
+    "div": "imp",
+    "product": "Bond 24 22x34  90 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "59e2f723381e5f1013dfef48",
+    "div": "imp",
+    "product": "Bond24  90 gsm otro Tamano",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "7e6a682fe68483f536e2dcd1",
+    "div": "imp",
+    "product": "Ledger 56  105 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "5cf981e1f5d6f3901fd0ab9d",
+    "div": "imp",
+    "product": "Ledger 56  105 gsm 8½x14",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "fd49e1184c7620e568c54cba",
+    "div": "imp",
+    "product": "Ledger 72  120 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "6b905715766651795ae3f595",
+    "div": "imp",
+    "product": "Cartulina Corriente Bca",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "6ddf2b897d211d00234922ce",
+    "div": "imp",
+    "product": "Cartulina Corriente Colores",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "0e4cbb752c8c6cdfb5dc0d6f",
+    "div": "imp",
+    "product": "Periodico 8½x11",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "b7b2af9e4ccfb5e17e68c6be",
+    "div": "imp",
+    "product": "Periodico 17x22",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "c5691e81ce3a81f1f37d6d05",
+    "div": "imp",
+    "product": "Periodico 22*34",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "7f1b62c773b5ce09cdc8003a",
+    "div": "imp",
+    "product": "Papel Golden Kraft",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "558d483a41d3e291b53f030c",
+    "div": "imp",
+    "product": "Cartulina Manila 23x35",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "6a6e083d71a9a665dc68cc53",
+    "div": "imp",
+    "product": "Cartulina Manila otro tamano",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "a86a4f3d5842ef2ca0be5a7c",
+    "div": "imp",
+    "product": "Satinado 80  23x35",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "3e2d68e1cac677d98fd6accf",
+    "div": "imp",
+    "product": "Satinado 80  25x38",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "14906f34ba64e1b35685c277",
+    "div": "imp",
+    "product": "Satinado 100  23x35",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "a56b703844af0a14f52ad6cf",
+    "div": "imp",
+    "product": "Satinado100  25x38",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "43b6888b71b4f400706ca213",
+    "div": "imp",
+    "product": "Cartonite 10 26x40",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "26c9c7e59956bf643c736c0b",
+    "div": "imp",
+    "product": "Cartonite 12 26x40",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "0ae2048f78b8cd6f64e4ac16",
+    "div": "imp",
+    "product": "Cartonite 14 26x40",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "c3a47e34b22009d8cf015f17",
+    "div": "imp",
+    "product": "Cartonite 16 26x40",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "d21fe21f19646ba6db48f84d",
+    "div": "imp",
+    "product": "Cartonite 18 26x40",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "335abdd3d086dcf610fe67e5",
+    "div": "imp",
+    "product": "Cartonite 20 26x40",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "819f73448996fe65c9e2f4f1",
+    "div": "imp",
+    "product": "Cartonite otro tamano",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "597014ad2d57046046fb1f6b",
+    "div": "imp",
+    "product": "Papel Groundwood",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "e47ae48bcf4cfc34816e4bc2",
+    "div": "imp",
+    "product": "Papel Cascara de Huevo",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "5b828c9c5b71301f29d526aa",
+    "div": "imp",
+    "product": "NCR Final         22x34",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "e41c4b78b3d1e91de6d43f5e",
+    "div": "imp",
+    "product": "NCR Final         8½x11",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "5a23f1debc4dbfc0351b5cb3",
+    "div": "imp",
+    "product": "NCR Intermed  22x34",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "0194629dfaa30d3d6a0d0f6a",
+    "div": "imp",
+    "product": "NCR Intermed  8½x11",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "2a458052496b207212327edb",
+    "div": "imp",
+    "product": "NCR Original    22x34",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "346f310959c3df262dc50add",
+    "div": "imp",
+    "product": "NCR Original   8½x11",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "c24fea65ea6946ee303389fb",
+    "div": "Mat",
+    "product": "Division Materia Prima",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "c906ea7cb42a2e4a7e2d4a2c",
+    "div": "Mat",
+    "product": "Higienico 70\"",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "98b45b3552c4eef125eb417c",
+    "div": "Mat",
+    "product": "Higienico 102\"",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "0354f9b2918c1e5e6d00553d",
+    "div": "Mat",
+    "product": "Servilletas 12\"",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "90cbbbca0fbc3ed00dafadcf",
+    "div": "Mat",
+    "product": "Servilletas 36\"",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "acbae4b92cd5bfe060985363",
+    "div": "Mat",
+    "product": "Toalla 70\"",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "7a8f1c721c305d649ce447ca",
+    "div": "Mat",
+    "product": "Toalla 102\"",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "cff299ca93fb47e2254060be",
+    "div": "Mat",
+    "product": "Cintas p/Cores 3\" 200 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "9bba523c1382d8ec45a7588b",
+    "div": "Mat",
+    "product": "Cintas p/Cores 3\" 230 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "aff47b5c8a92ce910ea81a42",
+    "div": "Mat",
+    "product": "Pacas de Papel",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "ff4b02a99e38de415e343a5f",
+    "div": "Mat",
+    "product": "Termicos 19\"",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "b4aaa111fc1462c8a7589539",
+    "div": "Mat",
+    "product": "Termico 31½\"",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "27f6bc5110d3042a01cceed7",
+    "div": "Mat",
+    "product": "Termico 34\"",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "0f0f6ce375c4ad3600e58331",
+    "div": "Mat",
+    "product": "Termico 54\"",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "febd78163088265f64d9e538",
+    "div": "Mat",
+    "product": "Termico otro tamano",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "e2e24cc59911b8ecc8297fbb",
+    "div": "Mat",
+    "product": "Rollos P/impr en Rotativas",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "0d3899b0a27f16540a47bc61",
+    "div": "Mat",
+    "product": "Carton CCKB cal 14",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "6df80a6a8d7636edb7e03b4d",
+    "div": "Mat",
+    "product": "Carton CCKB cal 16",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "b8b426e06487edd6c0e18ae0",
+    "div": "Mat",
+    "product": "Carton CCKB cal 18",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "935838d519f1448ae8c72dc9",
+    "div": "Mat",
+    "product": "Carton CCKB cal 20",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "b60373c852cbc27ea77df509",
+    "div": "Mat",
+    "product": "Carton CCKB cal 22",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "f884c19c72976e8a6e9c419f",
+    "div": "Mat",
+    "product": "Carton CCKB otros calibres",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "7da6bdd3cdf7535571339789",
+    "div": "Mat",
+    "product": "Cartonite 8",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "7ae7c04d28872ec09fc3b476",
+    "div": "Mat",
+    "product": "Cartonite 10",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "b112d7d8b0644b0d45351617",
+    "div": "Mat",
+    "product": "Cartonite 12",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "a869d0d7c3318da45b156554",
+    "div": "Mat",
+    "product": "Cartonite 14",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "89ce80bbf055a0a63f790db9",
+    "div": "Mat",
+    "product": "Cartonite 16",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "64f64792a9863b5672da87f8",
+    "div": "Mat",
+    "product": "Cartonite 18",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "9bd29c9d7e7ca250ee7eacf1",
+    "div": "Mat",
+    "product": "Cartonite 20",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "421075b14274b520eebba74c",
+    "div": "Mat",
+    "product": "Cartonite otros calibres",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "2c24cd02a0505311b75186cb",
+    "div": "Mat",
+    "product": "Papel Periodico para Diarios",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "9aa97f267141f925a18cba02",
+    "div": "Mat",
+    "product": "Periodico Industria Fundas",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "c8d9e0d78afce62763c69bf5",
+    "div": "Mat",
+    "product": "Papel Kraft Industria Funda",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "b80e996687a40a1bdc10cae5",
+    "div": "Mat",
+    "product": "Rollos NCR CB",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "d4aa69edbb45e5ea834d48d0",
+    "div": "Mat",
+    "product": "Rollos NCR CFB",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "4a38e92573df39c203ecd1a6",
+    "div": "Mat",
+    "product": "Rollos NCR CF",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "dcf1ef2a6cc56120854d39de",
+    "div": "Mat",
+    "product": "Rollos NCR SC",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "a9c38b41186aa01b9f6919df",
+    "div": "Mat",
+    "product": "GoldenKraft p/Ind Sobres",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "a97dfd033e5a7704702f33a4",
+    "div": "Med",
+    "product": "DIVISION MEDICA",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "f20b09ab3283efdd6bc140e3",
+    "div": "Med",
+    "product": "Papel Camilla 21x125  20gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "dc814491f1243f165b8c2195",
+    "div": "Med",
+    "product": "Papel Camilla 21x150  20 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "15f3e445cced8762ba98eb02",
+    "div": "Med",
+    "product": "Papel Camilla 21x225  20 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "9ffc78f4b443e78fe056b429",
+    "div": "Med",
+    "product": "Papel Camilla 21x300  20 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "d6ded26467a6754b7dc9af54",
+    "div": "Med",
+    "product": "Papel Camilla 21x125  30gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "e9e2ffe6660650050be421d0",
+    "div": "Med",
+    "product": "Papel Camilla 21x150  30 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "9d8240dedfc67e23d36d182e",
+    "div": "Med",
+    "product": "Papel Camilla 21x225  30 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "6c975bceb03fb0b35f710be7",
+    "div": "Med",
+    "product": "Papel Camilla 21x300  30 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "673ae0e09c48b6e5e6750491",
+    "div": "Med",
+    "product": "Papel Camilla 18x125  30gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "9a09fe4198fc67ef93bd9cf8",
+    "div": "Med",
+    "product": "Papel Camilla 18x150  30 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "8db9a449c058cc4e349ca54a",
+    "div": "Med",
+    "product": "Papel Camilla 18x225  30 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "56b9b539a8eac5e63c0dec54",
+    "div": "Med",
+    "product": "Papel Camilla18x300  30 gsm",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "acb0d72477cf62facea5e0c1",
+    "div": "Med",
+    "product": "Papel Toalla  21x150",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "d201198f6148fa22971add22",
+    "div": "Med",
+    "product": "Papel p/esterilizacion Perio",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "c75dad4c4b73b7799a4ab7dd",
+    "div": "Med",
+    "product": "Papel p/esterilizacion Kraft",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "ff093d23af91836070e30ce5",
+    "div": "Med",
+    "product": "Papel Camilla Pediatrico",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "6037ccb50e315418f22fb4ac",
+    "div": "Pap",
+    "product": "Division Papeleria",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "d7ee467a037ed24925589c26",
+    "div": "Pap",
+    "product": "Cartulina 22*28  Blanca",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "c2180162534c38b3741cc710",
+    "div": "Pap",
+    "product": "Catedra 5/1",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "a76bc7d1485128b88cf28b0b",
+    "div": "Pap",
+    "product": "Columnar 02,3,4,5",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "abbce6723b9c5012de02d487",
+    "div": "Pap",
+    "product": "Columnar 06   col.",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "a1cdd744bffa25b8c7c024fe",
+    "div": "Pap",
+    "product": "Columnar 12   col.",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "3b21d0396d0f39ecdb64408f",
+    "div": "Pap",
+    "product": "Columnar 18   col.",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "24ded3dff2d193510f97c425",
+    "div": "Pap",
+    "product": "Columnar 30   col.",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "417cc4d7250c0297248e5bb4",
+    "div": "Pap",
+    "product": "Columnar Perf",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "123d981db1af228a8fd0ed5c",
+    "div": "Pap",
+    "product": "Comandas",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "9d1fa95a31b0c39be5347080",
+    "div": "Pap",
+    "product": "Contrato Inquilinato",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "35092b01b3d23c57c87e1130",
+    "div": "Pap",
+    "product": "Contrato Venta Condicion",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "141a706dd66a99e6fe2c81f8",
+    "div": "Pap",
+    "product": "Ctu Hilo     4 * 6    Bco",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "d9308dbcc6073aac74b42dbb",
+    "div": "Pap",
+    "product": "Ctu Hilo     4 * 6    Cre",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "b444d6d475b9b81055455a95",
+    "div": "Pap",
+    "product": "Ctu Hilo     8½ * 11    Bco",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "d27dcd5ed095fd6b2900fdcd",
+    "div": "Pap",
+    "product": "Ctu Hilo     8½ * 11    Cre",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "24d56f184275c80c484a95cb",
+    "div": "Pap",
+    "product": "Cuadernito  20 Pag.",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "ecc512287f450aef93746d05",
+    "div": "Pap",
+    "product": "Cuadernito  24 Pag.",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "e08b5e1472ada5d815bc1030",
+    "div": "Pap",
+    "product": "Cuaderno  80 Pag",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "c44d5cfc41e1c1221088fc75",
+    "div": "Pap",
+    "product": "Cuaderno 120 Pag",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "c64bf778ef8e43a0a0f0d9cb",
+    "div": "Pap",
+    "product": "Cuaderno 140 Pag",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "43dbeef37b20e2705e3cfc83",
+    "div": "Pap",
+    "product": "Cuaderno 140 Pag Espiral",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "0721979adea422fd9f0a5233",
+    "div": "Pap",
+    "product": "Cuaderno 200 Pag",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "11b310f8e7e26b8d3d6061d4",
+    "div": "Pap",
+    "product": "Cuaderno Colorear",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "bb29253bdc161aefc0aa182f",
+    "div": "Pap",
+    "product": "Cuadriculado Espiral",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "706bfc94e50ef480b734f681",
+    "div": "Pap",
+    "product": "Cuadriculado Pegado",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "41d2966257d927bcd6c5d830",
+    "div": "Pap",
+    "product": "Desembolso de Caja",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "a87b142d3d6f782245023900",
+    "div": "Pap",
+    "product": "Dibujo Pegado",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "2b0fe0bf808e5cab4286e0d2",
+    "div": "Pap",
+    "product": "Entrada de Diario",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "beab0636cc9de5decf12fe47",
+    "div": "Pap",
+    "product": "F O L D E R  * 11",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "cbd98abe33d10bd1ff3564b5",
+    "div": "Pap",
+    "product": "F O L D E R  * 11 Color",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "f401e0b9ff6182e069321d10",
+    "div": "Pap",
+    "product": "F O L D E R  * 14 Legal",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "f6eb169559b5ec92c1f6c8d2",
+    "div": "Pap",
+    "product": "Factura Gde. 1P",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "215a78f6ec75f7e9c53c974e",
+    "div": "Pap",
+    "product": "Factura Gde. 2P 30/1",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "78b8060f373d620a1917d06a",
+    "div": "Pap",
+    "product": "Factura Gde. 2P 35/1",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "18415909f7ac6b99ee4da58f",
+    "div": "Pap",
+    "product": "Factura Gde. 3P 30/1",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "13fe0a51c5a65a46d7d3bb17",
+    "div": "Pap",
+    "product": "Factura Peq. 1P",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "9832eb1dc5dbbd7b60b8c6c3",
+    "div": "Pap",
+    "product": "Factura Peq. 2P",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "515a78a459064bdefd97bc9e",
+    "div": "Pap",
+    "product": "Fichas 3 x 5",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "2d98bbe2d2cc11555c6f084a",
+    "div": "Pap",
+    "product": "Fichas 4 x 6",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "c7882c0b504668fae586abef",
+    "div": "Pap",
+    "product": "Fichas 5 x 8",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "f5f7ba3d81422334d49a6773",
+    "div": "Pap",
+    "product": "Hoja Milimetica",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "820f2aab9243f02ee0c0aa9e",
+    "div": "Pap",
+    "product": "Hoja Notarial",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "b9e7077588d99d2497ee15f8",
+    "div": "Pap",
+    "product": "Hoja P/carpeta Bca.",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "1cfdc3d1faa0f4420b35b3b8",
+    "div": "Pap",
+    "product": "Hoja P/carpeta color",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "1b91f1ce1cf6baa5f524c33f",
+    "div": "Pap",
+    "product": "Hoja present. Bca.",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "590a24fe6d4902ef65defed1",
+    "div": "Pap",
+    "product": "Hoja present. Sutida",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "79976f4313af85f844a30f4b",
+    "div": "Pap",
+    "product": "Libreta 3x3",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "709fae0699e2fc28e8bcd2ca",
+    "div": "Pap",
+    "product": "Libreta Notas",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "a2a64105204405cc844006e5",
+    "div": "Pap",
+    "product": "Libro Record.  150 Pag.",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "f8092854b881b4b178afccf9",
+    "div": "Pap",
+    "product": "Libro Record.  300 Pag.",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "993c69828ebc62a9e0bdaa23",
+    "div": "Pap",
+    "product": "Libro Record.  500 Pag.",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "a69034a25a17b9bd611ec737",
+    "div": "Pap",
+    "product": "Lta. Ray. 5x8   45/1",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "037eb9a55958c3c36d2e50b4",
+    "div": "Pap",
+    "product": "Lta. Ray. 8x11 40/1",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "0e3667df3c08947f89c08a45",
+    "div": "Pap",
+    "product": "Lta. Ray. 8x11 45/1",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "2597ff59da24118b2eb717a7",
+    "div": "Pap",
+    "product": "Lta. Ray. Perf. 5x8 Amarilla",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "82f847acad824484cfc04e06",
+    "div": "Pap",
+    "product": "Lta. Ray. Perf. 8x11 Amaril",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "7f9eeb4af32a31ba41226604",
+    "div": "Pap",
+    "product": "Lta. Ray. Perf. 8x14 Amaril",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "d18bec3163199e4eba94e620",
+    "div": "Pap",
+    "product": "Mayor Gde.",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "8aba679facd74293ff3b2b6e",
+    "div": "Pap",
+    "product": "Mayor Peq.",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "601f52c1a3057fc46f488299",
+    "div": "Pap",
+    "product": "Opalina   4 * 6",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "03828362ff72dbb8589d34af",
+    "div": "Pap",
+    "product": "Opalina   8½ *11",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "7f979116d76605b367352e43",
+    "div": "Pap",
+    "product": "Opalina  26*40",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "4bcdd716668e54384ae6f3a8",
+    "div": "Pap",
+    "product": "Pagare",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "b7e52be1e4e540db14adbac3",
+    "div": "Pap",
+    "product": "Papel  8½ Banca",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "68aafb28ec7842263116072e",
+    "div": "Pap",
+    "product": "Papel 8½*11 Fluores",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "5c41c68d74e49cde3076fd83",
+    "div": "Pap",
+    "product": "Papel 8½*11 pastel",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "7b292bb4c662c2cad7687db5",
+    "div": "Pap",
+    "product": "Papel 9½ * 11 1P",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "bffc1ff7b7d17f4e94bb6dd4",
+    "div": "Pap",
+    "product": "Papel 9½ * 11 2P",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "32e5b71031bf828ce33a2969",
+    "div": "Pap",
+    "product": "Papel 9½ * 11 2P Color",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "0fd43d430bc0e0199047c749",
+    "div": "Pap",
+    "product": "Papel 9½ * 11 3P",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "a375430bfafbdd2215211e47",
+    "div": "Pap",
+    "product": "Papel 9½ * 11 3P Color",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "57758d697eb2441f351fa168",
+    "div": "Pap",
+    "product": "Papel B-16 x 11",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "5f11de6af4e0ba99f3434e03",
+    "div": "Pap",
+    "product": "Papel B-20 *11  100/1",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "b45c710c9478e7c999960fa5",
+    "div": "Pap",
+    "product": "Papel B-20 Colores 100/1 Surtido",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "f5713bb9a5977bf624caefcd",
+    "div": "Pap",
+    "product": "Papel B-20 Colores 250/1 Surtido",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "b8e3b42e15795e6fae6bca38",
+    "div": "Pap",
+    "product": "Papel B-20 Colores 500/1 Surtido",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "fe46dfd622596124f9d060e9",
+    "div": "Pap",
+    "product": "Papel B-20 Colores 100/1",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "00825f454354b1c78de059d8",
+    "div": "Pap",
+    "product": "Papel B-20 Colores 500/1",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "3a343406f22d3059fe3e33d1",
+    "div": "Pap",
+    "product": "Papel B-20 x 11  EcoPaper",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "e1c79bc1d6bbf1854eef0cff",
+    "div": "Pap",
+    "product": "Papel B-20 x 11  Xcelent",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "c0614d6b3bea533891e74dbf",
+    "div": "Pap",
+    "product": "Papel B-20 x 13",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "485cab6afc926f5a7d5d59b6",
+    "div": "Pap",
+    "product": "Papel B-20 x 14 Xcelent",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "7e9d00ca01b93a3228530a28",
+    "div": "Pap",
+    "product": "Papel B-20 x 14 EcoPaper",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "c55cc796777619deca9187dd",
+    "div": "Pap",
+    "product": "Papel B-20 x 17",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "124d9afa7d45a9a5f50dce23",
+    "div": "Pap",
+    "product": "Papel de Construccion",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "e89a1bfe6cb3648fc0a3ca9c",
+    "div": "Pap",
+    "product": "Papel Hilo 8½ * 11    Bco",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "e2fdc38f60d26bbadcaccb18",
+    "div": "Pap",
+    "product": "Papel Hilo 8½ * 11    Cre",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "9a73b018e80fc561f25e8cd9",
+    "div": "Pap",
+    "product": "Papel ministro",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "ef78dfb1e76d28b83cee899b",
+    "div": "Pap",
+    "product": "Post it  2x3",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "cf1613bc4f3dcd8a3d730920",
+    "div": "Pap",
+    "product": "Post it  3x3",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "0c2457e81b90dd8adfb974d0",
+    "div": "Pap",
+    "product": "Post it  3x5",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "b1203c35bbd38c5f31da05d1",
+    "div": "Pap",
+    "product": "R camilla  Toalla",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "3eb7883368fa6ca772746343",
+    "div": "Pap",
+    "product": "R camilla Antibacterial",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "38fd9b15e6caf5480e12ae49",
+    "div": "Pap",
+    "product": "R camilla Periodico",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "4a61cb604be2372c2f911b6d",
+    "div": "Pap",
+    "product": "R de camilla B-12",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "bded7689fea8a7dd87d09da1",
+    "div": "Pap",
+    "product": "R Kraft 36",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "2e12b64fa35ec2b4479ec808",
+    "div": "Pap",
+    "product": "R Kraft 42",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "495d4891ff025110c2fdd077",
+    "div": "Pap",
+    "product": "R Kraft 72",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "2dec81dbb965a6afb1452a1a",
+    "div": "Pap",
+    "product": "Recibo  c/ copia",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "b53df16de65407d34e33f866",
+    "div": "Pap",
+    "product": "Recibo Gde.",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "1551545f1d208778a95cd9a8",
+    "div": "Pap",
+    "product": "Recibo Peq.",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "b97c534aad8ef1a05e996f57",
+    "div": "Pap",
+    "product": "Rollo de 3\"  2P",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "d6071418a69b4137e90a349b",
+    "div": "Pap",
+    "product": "Rollo Periodico 12",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "1d90635aee574b58ce07c024",
+    "div": "Pap",
+    "product": "Rollo Periodico 18",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "29fb3561ecfefa0eac0d21eb",
+    "div": "Pap",
+    "product": "Rollo Kraft 18\"",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "96b34cfd529b8c006ca040cb",
+    "div": "Pap",
+    "product": "Rollo Kraft 24\"",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "9973900d9bb9911c305f6179",
+    "div": "Pap",
+    "product": "Rollo Kraft 36\"",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "1e226db26c38f8623a52ec27",
+    "div": "Pap",
+    "product": "Rollo Kraft 40\"",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "c0042d683f60a8a4e8158911",
+    "div": "Pap",
+    "product": "Rollo Plotter 36\"x125'",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "98835ec52b5931000d1d4f58",
+    "div": "Pap",
+    "product": "Rollo Plotter 36\"x400'",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "e5a99363442319ae214e9ff7",
+    "div": "Pap",
+    "product": "Rollo Plotter 24\"x125'",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "b93d4e6fda81c33562bbc0ff",
+    "div": "Pap",
+    "product": "Rollo Plotter 24\"x400'",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "ea19b578302a1323720333c2",
+    "div": "Pap",
+    "product": "Rollo Plotter 72 periodico",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "b05c821982c5a0c3f8b5c402",
+    "div": "Pap",
+    "product": "Rollo Term 2¼ x140'",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "3564f2a7738b8a07cc69a9ad",
+    "div": "Pap",
+    "product": "Rollo Term 2¼x 50' Verifone",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "5ce50f9721231d3bc08b1f42",
+    "div": "Pap",
+    "product": "Rollo Term 3",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "056a339a58c0e3cf807126c6",
+    "div": "Pap",
+    "product": "Rollo Term 31/8 x140'",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "94ffacf827911015cc775ece",
+    "div": "Pap",
+    "product": "Rollo Term 31/8 x47'",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "290ed33ebd11fbd9b9e4c009",
+    "div": "Pap",
+    "product": "Rollo Term 31/8 x80'",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "ea9117defe36175140c6fc44",
+    "div": "Pap",
+    "product": "Rollos de 2¼\"   Calc",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "07b29f844fc47437a5817391",
+    "div": "Pap",
+    "product": "Rollos de 3\"   Bond",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "c3965a9645895cfa7cb9bac8",
+    "div": "Pap",
+    "product": "Sobre Bco 10",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "05c4331883ed2a035c5ff03f",
+    "div": "Pap",
+    "product": "Sobre Bco 6 3/4",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "153961ce93d20d8313c5a529",
+    "div": "Pap",
+    "product": "Sobre pago #5",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "858e2681f74943a41e14adc1",
+    "div": "Pap",
+    "product": "Sobre pago #7",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "2252211c86d6c7d4553c65f2",
+    "div": "Pap",
+    "product": "Sobre pago #7  Blanco",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "a0465a4676cc1b258a550e8c",
+    "div": "Pap",
+    "product": "Sobres  6 x 9",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "93f2e8c0d0dd5580430bbee4",
+    "div": "Pap",
+    "product": "Sobres  9x12",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "fda3aa8d2e4b90cb1f291cdb",
+    "div": "Pap",
+    "product": "Sobres 10x13",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "63526f437650d66590afdde3",
+    "div": "Pap",
+    "product": "Sobres 10x15",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "dd0d135367dee6234fb8db64",
+    "div": "Pap",
+    "product": "Sobres 14x16",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "7d931ab6f8f735d7a2ace55a",
+    "div": "Pap",
+    "product": "Sobres  6 x 9  Blanco",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "97a5ea0c0c78c4ebbf9b1ae4",
+    "div": "Pap",
+    "product": "Sobres  9x12  Blanco",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "713e8386d4f34face042c7ca",
+    "div": "Pap",
+    "product": "Sobres 10x13  Blanco",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "f324781018806359b70b12fe",
+    "div": "Pap",
+    "product": "Sobres 10x15  Blanco",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "23e470d27eb4e4699f1ddae7",
+    "div": "Pap",
+    "product": "Sobres 14x16  Blanco",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  },
+  {
+    "id": "8554c0def08c25a3802d9f04",
+    "div": "Pap",
+    "product": "Cartulina 22*28  Colores",
+    "price1": null,
+    "price2": null,
+    "price3": null
+  }
+]

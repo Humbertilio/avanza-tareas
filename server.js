@@ -12,6 +12,7 @@ const HOST = process.env.HOST || '0.0.0.0';
 const DATA_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'database.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const PRODUCTS_SEED_FILE = path.join(__dirname, 'seed', 'products.json');
 const SESSION_HOURS = 12;
 const TASK_RETENTION_MS = Number(process.env.TASK_RETENTION_MS || 48 * 60 * 60 * 1000);
 const STATUSES = [0, 25, 50, 75, 100];
@@ -53,7 +54,8 @@ function initialDatabase() {
     inventoryItems: [],
     inventoryMovements: [],
     inventoryImports: [],
-    purchaseRequests: []
+    purchaseRequests: [],
+    products: []
   };
 }
 
@@ -84,6 +86,14 @@ function configurePush() {
   }
   for (const collection of ['inventoryItems', 'inventoryMovements', 'inventoryImports', 'purchaseRequests']) {
     if (!Array.isArray(db[collection])) { db[collection] = []; changed = true; }
+  }
+  if (!Array.isArray(db.products)) { db.products = []; changed = true; }
+  if (!db.meta.productsSeeded && fs.existsSync(PRODUCTS_SEED_FILE)) {
+    if (!db.products.length) {
+      const now = new Date().toISOString();
+      db.products = JSON.parse(fs.readFileSync(PRODUCTS_SEED_FILE, 'utf8')).map(item => ({ ...item, createdAt: now, updatedAt: now }));
+    }
+    db.meta.productsSeeded = true; changed = true;
   }
   if (!db.meta.vapidKeys) { db.meta.vapidKeys = webpush.generateVAPIDKeys(); changed = true; }
   if (changed) fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
@@ -161,6 +171,17 @@ function validatedInventoryItem(input) {
   return { material: material.toUpperCase(), calibre: inventoryNumber(input.calibre), ancho: inventoryNumber(input.ancho, false), peso: inventoryNumber(input.peso), gramaje: inventoryNumber(input.gramaje), ubicacion, externalId, observacion, destino };
 }
 function inventoryRowHash(item) { return crypto.createHash('sha256').update(JSON.stringify([item.material,item.calibre,item.ancho,item.peso,item.gramaje,item.ubicacion,item.externalId,item.observacion,item.destino])).digest('hex'); }
+function productPrice(value) {
+  if (value === null || value === undefined || String(value).trim() === '') return null;
+  const normalized = String(value).trim().replace(/,/g, '');
+  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) throw Object.assign(new Error('Los precios admiten máximo dos decimales'), { status: 400 });
+  return Math.round(Number(normalized) * 100) / 100;
+}
+function validatedProduct(input) {
+  const div = clean(input.div, 20), product = clean(input.product, 200);
+  if (!div || !product) throw Object.assign(new Error('DIV y Producto son obligatorios'), { status: 400 });
+  return { div, product, price1: productPrice(input.price1), price2: productPrice(input.price2), price3: productPrice(input.price3) };
+}
 function requireUser(req, res) {
   const user = currentUser(req);
   if (!user) json(res, 401, { error: 'Debes iniciar sesión' });
@@ -267,6 +288,32 @@ async function api(req, res, url) {
       db.pushSubscriptions.push({ userId: user.id, subscription, createdAt: new Date().toISOString() });
     });
     return json(res, 201, { ok: true });
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/products') {
+    return json(res, 200, { products: (readDb().products || []).slice().sort((a,b) => a.div.localeCompare(b.div,'es') || a.product.localeCompare(b.product,'es')) });
+  }
+  if (req.method === 'POST' && url.pathname === '/api/products') {
+    if (user.role !== 'admin') return json(res, 403, { error: 'Solo el administrador puede agregar productos' });
+    try {
+      const values = validatedProduct(await body(req));
+      const product = await mutateDb(db => { const now=new Date().toISOString(),next={id:crypto.randomUUID(),...values,createdAt:now,updatedAt:now};db.products.push(next);return next; });
+      return json(res, 201, { product });
+    } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
+  const productMatch = url.pathname.match(/^\/api\/products\/([^/]+)$/);
+  if (req.method === 'PATCH' && productMatch) {
+    if (user.role !== 'admin') return json(res, 403, { error: 'Solo el administrador puede modificar productos' });
+    try {
+      const values = validatedProduct(await body(req));
+      const product = await mutateDb(db => { const found=db.products.find(item=>item.id===productMatch[1]);if(!found)throw Object.assign(new Error('Producto no encontrado'),{status:404});Object.assign(found,values,{updatedAt:new Date().toISOString()});return found; });
+      return json(res, 200, { product });
+    } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
+  if (req.method === 'DELETE' && productMatch) {
+    if (user.role !== 'admin') return json(res, 403, { error: 'Solo el administrador puede borrar productos' });
+    try { await mutateDb(db=>{const index=db.products.findIndex(item=>item.id===productMatch[1]);if(index<0)throw Object.assign(new Error('Producto no encontrado'),{status:404});db.products.splice(index,1);});return json(res,200,{ok:true}); }
+    catch (error) { return json(res,error.status||500,{error:error.message}); }
   }
 
   if (req.method === 'GET' && url.pathname === '/api/inventory') {
@@ -396,7 +443,7 @@ async function api(req, res, url) {
     } catch (error) { return json(res, error.status || 400, { error: error.message || 'No se pudo leer el archivo' }); }
   }
 
-  if(user.role==='client'&&!url.pathname.startsWith('/api/chat/')&&!url.pathname.startsWith('/api/companies')&&!url.pathname.startsWith('/api/inventory'))return json(res,403,{error:'Los clientes solo tienen acceso a su empresa e inventario'});
+  if(user.role==='client'&&!url.pathname.startsWith('/api/chat/')&&!url.pathname.startsWith('/api/companies')&&!url.pathname.startsWith('/api/inventory')&&!url.pathname.startsWith('/api/products'))return json(res,403,{error:'Los clientes solo tienen acceso a su empresa, inventario y productos'});
 
   if (req.method === 'GET' && url.pathname === '/api/users') {
     const allUsers = readDb().users;
