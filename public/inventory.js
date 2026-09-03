@@ -1,12 +1,13 @@
 (() => {
   const fields = ['material','calibre','ancho','peso','gramaje','ubicacion','externalId','observacion','destino'];
-  const labels = {material:'Material',calibre:'Calibre',ancho:'Ancho',peso:'Peso',gramaje:'Gramaje',ubicacion:'Ubicación',externalId:'ID',observacion:'Observación',destino:'Destino'};
-  const widths = {material:4,calibre:4,ancho:4,peso:5,gramaje:3,ubicacion:3,externalId:7,observacion:15,destino:15};
+  const labels = {material:'MAT',calibre:'CAL',ancho:'ANC',peso:'PESO',gramaje:'GSM',ubicacion:'UBI',externalId:'ID',observacion:'Observación',destino:'Destino'};
+  const widths = {material:4,calibre:4,ancho:4,peso:6,gramaje:3,ubicacion:3,externalId:7,observacion:15,destino:15};
   const clientFields = ['material','calibre','ancho','peso','gramaje','observacion','externalId'];
   const state = {items:[],movements:[],imports:[],orders:[],tab:'items',filters:{},sort:{key:'material',dir:1},selected:new Set(),clickTimer:null,longPressTimer:null,longPressTriggered:false};
   const root = () => document.querySelector('#inventoryRoot');
   const safe = value => escapeHtml(String(value ?? ''));
   const display = value => value === null || value === undefined || value === '' ? '—' : safe(value);
+  const displayField = (key,value) => key === 'peso' && value !== null && value !== undefined && value !== '' ? safe(Number(value).toLocaleString('en-US',{maximumFractionDigits:0})) : display(value);
   const statusText = value => ({pending:'Pendiente',review:'Revisión',approved:'Aprobada',rejected:'Rechazada',completed:'Completada'})[value] || value;
 
   async function load() {
@@ -39,7 +40,7 @@
 
   function renderItems() {
     const keys = me.role === 'client' ? clientFields : fields, items = visibleItems(), content = root().querySelector('#inventoryContent');
-    content.innerHTML = `<div class="inventory-count">${items.length}</div><div class="inventory-sheet"><table><thead><tr>${keys.map(key=>`<th data-sort="${key}" style="width:${widths[key]}ch;min-width:${widths[key]}ch" title="Ordenar">${labels[key]} ${state.sort.key===key?(state.sort.dir===1?'▲':'▼'):''}</th>`).join('')}</tr><tr class="inventory-filters">${keys.map(key=>`<th><input data-filter="${key}" value="${safe(state.filters[key]||'')}" aria-label="Filtrar ${labels[key]}"></th>`).join('')}</tr></thead><tbody>${items.map(item=>`<tr data-item="${item.id}" class="${item.active?'':'inactive'} ${state.selected.has(item.id)?'selected':''}">${keys.map(key=>`<td title="${safe(item[key]??'')}">${display(item[key])}</td>`).join('')}</tr>`).join('')}${me.role!=='client'?`<tr id="inventoryNewRow" class="inventory-new-row">${keys.map((key,index)=>`<td>${index===0?'＋ Nuevo':''}</td>`).join('')}</tr>`:''}</tbody></table></div>`;
+    content.innerHTML = `<div class="inventory-count">${items.length}</div><div class="inventory-sheet"><table><thead><tr>${keys.map(key=>`<th data-sort="${key}" style="width:${widths[key]}ch;min-width:${widths[key]}ch" title="Ordenar">${labels[key]} ${state.sort.key===key?(state.sort.dir===1?'▲':'▼'):''}</th>`).join('')}</tr><tr class="inventory-filters">${keys.map(key=>`<th><input data-filter="${key}" value="${safe(state.filters[key]||'')}" aria-label="Filtrar ${labels[key]}"></th>`).join('')}</tr></thead><tbody>${items.map(item=>`<tr data-item="${item.id}" class="${item.active?'':'inactive'} ${state.selected.has(item.id)?'selected':''}">${keys.map(key=>`<td title="${safe(item[key]??'')}">${displayField(key,item[key])}</td>`).join('')}</tr>`).join('')}${me.role!=='client'?`<tr id="inventoryNewRow" class="inventory-new-row">${keys.map(key=>`<td><input data-new-field="${key}" maxlength="${{material:4,ubicacion:6,externalId:7,observacion:40,destino:40}[key]||20}" inputmode="${['calibre','peso','gramaje'].includes(key)?'numeric':key==='ancho'?'decimal':'text'}" aria-label="Nuevo ${labels[key]}" placeholder="${key==='material'?'＋':''}"></td>`).join('')}</tr>`:''}</tbody></table></div>`;
     content.querySelectorAll('[data-sort]').forEach(th=>th.addEventListener('click',()=>{const key=th.dataset.sort;if(state.sort.key===key)state.sort.dir*=-1;else state.sort={key,dir:1};renderItems();}));
     content.querySelectorAll('[data-filter]').forEach(input=>input.addEventListener('input',()=>{state.filters[input.dataset.filter]=input.value;renderItems();const next=root().querySelector(`[data-filter="${input.dataset.filter}"]`);next?.focus();next?.setSelectionRange(input.value.length,input.value.length);}));
     content.querySelectorAll('[data-item]').forEach(row=>{
@@ -59,11 +60,12 @@
         row.addEventListener('contextmenu',event=>event.preventDefault());
       }
     });
-    content.querySelector('#inventoryNewRow')?.addEventListener('click',()=>openItem());
+    content.querySelectorAll('[data-new-field]').forEach(input=>input.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();addInlineItem();}}));
   }
 
   function modal(html) { let node=document.querySelector('#inventoryModal');if(!node){node=document.createElement('div');node.id='inventoryModal';node.className='modal';document.body.appendChild(node);}node.innerHTML=html;node.classList.remove('hidden');node.addEventListener('click',event=>{if(event.target===node)closeModal();},{once:true});return node; }
   function closeModal(){document.querySelector('#inventoryModal')?.classList.add('hidden');}
+  async function addInlineItem(){const row=root().querySelector('#inventoryNewRow');if(!row||row.dataset.saving)return;const inputs=[...row.querySelectorAll('[data-new-field]')],payload=Object.fromEntries(inputs.map(input=>[input.dataset.newField,input.value]));if(!Object.values(payload).some(value=>value.trim()))return;row.dataset.saving='1';try{await request('/api/inventory/items',{method:'POST',body:JSON.stringify(payload)});await load();toast('Artículo agregado');}catch(error){delete row.dataset.saving;toast(error.message);inputs[0]?.focus();}}
   async function deleteItem(item){if(!confirm('¿Borrar este artículo?'))return;try{await request(`/api/inventory/items/${item.id}`,{method:'DELETE'});closeModal();await load();toast('Artículo borrado');}catch(error){toast(error.message);}}
   function itemInputs(item={}) { return fields.map(key=>`<label>${labels[key]}<input name="${key}" value="${safe(item[key]??'')}" ${key==='material'?'required':''} maxlength="${{material:4,ubicacion:6,externalId:7,observacion:40,destino:40}[key]||20}" inputmode="${['calibre','peso','gramaje'].includes(key)?'numeric':key==='ancho'?'decimal':'text'}"></label>`).join(''); }
 

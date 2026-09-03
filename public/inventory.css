@@ -3,7 +3,7 @@ body:has(#inventoryView:not(.hidden)) .content>header{display:none}
 .inventory-count{height:20px;text-align:right;font-size:10px;color:var(--muted)}
 .inventory-sheet{height:calc(100dvh - 150px);overflow:auto;border:1px solid #9e9e9e;background:#fff}
 .inventory-sheet table{width:max-content;border-collapse:collapse;table-layout:fixed;font-size:11px}
-.inventory-sheet th,.inventory-sheet td{height:22px;max-width:120px;padding:2px 4px;border-right:1px solid #b7b7b7;border-bottom:1px solid #d7d7d7;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inventory-sheet th,.inventory-sheet td{box-sizing:content-box;height:22px;padding:2px 4px;border-right:1px solid #b7b7b7;border-bottom:1px solid #d7d7d7;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .inventory-sheet thead tr:first-child th{position:sticky;top:0;z-index:4;background:#107c41;color:#fff;cursor:pointer;resize:horizontal;overflow:hidden}
 .inventory-sheet .inventory-filters th{position:sticky;top:22px;z-index:3;background:#e2f0d9;padding:1px}
 .inventory-filters input{height:19px;padding:1px 3px;border:1px solid #a9c9b5;border-radius:0;font-size:10px}
@@ -14,6 +14,7 @@ body:has(#inventoryView:not(.hidden)) .content>header{display:none}
 .inventory-sheet tr.inactive td{color:#c00000}
 .inventory-sheet tr.selected td{background:#c6e0b4}
 .inventory-new-row td{height:24px;background:#e2f0d9;color:#107c41;font-weight:800;cursor:text}
+.inventory-new-row input{height:20px;padding:1px 2px;border:0;border-radius:0;background:#fff;font-size:10px;box-shadow:none}
 .inventory-bottom{position:sticky;bottom:0;z-index:6;display:flex;gap:4px;align-items:center;padding:5px 0 0;background:var(--paper);overflow-x:auto}
 .inventory-tabs{display:flex;gap:3px;overflow-x:auto}
 .inventory-tabs button,.inventory-bottom>button{border:1px solid #b7b7b7;background:#f3f3f3;padding:7px 10px;cursor:pointer;white-space:nowrap;font-size:11px}

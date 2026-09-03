@@ -148,7 +148,7 @@ function validDate(value) { return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.
 function validPhone(value) { return !value || /^\d{3}-\d{3}-\d{4}$/.test(value); }
 function inventoryNumber(value, integer = true) {
   if (value === null || value === undefined || String(value).trim() === '') return null;
-  const normalized = String(value).trim().replace(',', '.');
+  const normalized = integer ? String(value).trim().replace(/,/g, '') : String(value).trim().replace(',', '.');
   if (integer ? !/^\d+$/.test(normalized) : !/^\d+(?:\.\d)?$/.test(normalized)) throw Object.assign(new Error(integer ? 'El valor debe ser entero' : 'Ancho admite máximo un decimal'), { status: 400 });
   return Number(normalized);
 }
