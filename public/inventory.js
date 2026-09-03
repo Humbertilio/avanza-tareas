@@ -52,10 +52,11 @@
       if(me.role!=='client')row.addEventListener('dblclick',()=>{clearTimeout(state.clickTimer);openItem(item);});
       if(me.role==='admin'){
         let startX=0,startY=0;
-        row.addEventListener('pointerdown',event=>{if(event.pointerType!=='touch')return;startX=event.clientX;startY=event.clientY;state.longPressTriggered=false;clearTimeout(state.longPressTimer);state.longPressTimer=setTimeout(()=>{state.longPressTriggered=true;clearTimeout(state.clickTimer);deleteItem(item);},2000);});
-        row.addEventListener('pointermove',event=>{if(Math.abs(event.clientX-startX)>10||Math.abs(event.clientY-startY)>10)clearTimeout(state.longPressTimer);});
-        ['pointerup','pointercancel','pointerleave'].forEach(type=>row.addEventListener(type,()=>clearTimeout(state.longPressTimer)));
-        row.addEventListener('contextmenu',event=>{if(state.longPressTriggered)event.preventDefault();});
+        const stopHold=()=>{clearTimeout(state.longPressTimer);row.classList.remove('holding');};
+        row.addEventListener('pointerdown',event=>{if(event.pointerType==='mouse')return;startX=event.clientX;startY=event.clientY;state.longPressTriggered=false;stopHold();row.classList.add('holding');try{row.setPointerCapture(event.pointerId);}catch{}state.longPressTimer=setTimeout(()=>{state.longPressTriggered=true;clearTimeout(state.clickTimer);row.classList.remove('holding');deleteItem(item);},2000);});
+        row.addEventListener('pointermove',event=>{if(Math.abs(event.clientX-startX)>14||Math.abs(event.clientY-startY)>14)stopHold();});
+        ['pointerup','pointercancel'].forEach(type=>row.addEventListener(type,stopHold));
+        row.addEventListener('contextmenu',event=>event.preventDefault());
       }
     });
     content.querySelector('#inventoryNewRow')?.addEventListener('click',()=>openItem());

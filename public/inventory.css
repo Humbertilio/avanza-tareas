@@ -8,6 +8,8 @@ body:has(#inventoryView:not(.hidden)) .content>header{display:none}
 .inventory-sheet .inventory-filters th{position:sticky;top:22px;z-index:3;background:#e2f0d9;padding:1px}
 .inventory-filters input{height:19px;padding:1px 3px;border:1px solid #a9c9b5;border-radius:0;font-size:10px}
 .inventory-sheet tbody tr:not(.inventory-new-row){cursor:pointer}
+.inventory-sheet tr[data-item]{-webkit-touch-callout:none;user-select:none}
+.inventory-sheet tr.holding td{background:#ffe3b3}
 .inventory-sheet tbody tr:hover td{background:#edf7f1}
 .inventory-sheet tr.inactive td{color:#c00000}
 .inventory-sheet tr.selected td{background:#c6e0b4}
