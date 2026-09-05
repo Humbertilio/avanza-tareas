@@ -1,0 +1,38 @@
+.app .tracking-admin > aside {
+  position: static;
+  width: auto;
+  height: auto;
+  display: block;
+  padding: 18px;
+  color: var(--ink);
+}
+
+.app .tracking-admin > section {
+  position: static;
+  width: auto;
+  min-width: 0;
+  height: auto;
+}
+
+@media (max-width: 760px) {
+  .tracking-admin {
+    display: block;
+  }
+
+  .app .tracking-admin > aside {
+    max-height: none;
+    margin-bottom: 12px;
+  }
+
+  #trackingMap {
+    width: 100%;
+    overflow: hidden;
+  }
+
+  #trackingMap iframe {
+    width: 100%;
+    min-width: 0;
+    height: 58vh;
+    min-height: 360px;
+  }
+}
