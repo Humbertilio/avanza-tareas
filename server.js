@@ -17,7 +17,7 @@ const MATERIALS_FILE = path.join(__dirname, 'seed', 'materials.json');
 const SESSION_HOURS = 12;
 const TASK_RETENTION_MS = Number(process.env.TASK_RETENTION_MS || 48 * 60 * 60 * 1000);
 const STATUSES = [0, 25, 50, 75, 100];
-const ROLES = ['admin', 'employee', 'client'];
+const ROLES = ['admin', 'employee', 'seller', 'client'];
 const sessions = new Map();
 const chatStreams = new Map();
 let writeQueue = Promise.resolve();
@@ -56,6 +56,8 @@ function initialDatabase() {
     inventoryMovements: [],
     inventoryImports: [],
     purchaseRequests: [],
+    trackingSessions: [],
+    locationPoints: [],
     products: []
   };
 }
@@ -86,6 +88,9 @@ function configurePush() {
     if (!Array.isArray(db[collection])) { db[collection] = []; changed = true; }
   }
   for (const collection of ['inventoryItems', 'inventoryMovements', 'inventoryImports', 'purchaseRequests']) {
+    if (!Array.isArray(db[collection])) { db[collection] = []; changed = true; }
+  }
+  for (const collection of ['trackingSessions', 'locationPoints']) {
     if (!Array.isArray(db[collection])) { db[collection] = []; changed = true; }
   }
   if (!Array.isArray(db.products)) { db.products = []; changed = true; }
@@ -336,7 +341,7 @@ async function api(req, res, url) {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/inventory/items') {
-    if (!['admin','employee'].includes(user.role)) return json(res, 403, { error: 'No autorizado' });
+    if (!['admin','employee','seller'].includes(user.role)) return json(res, 403, { error: 'No autorizado' });
     try {
       const values = validatedInventoryItem(await body(req));
       const item = await mutateDb(db => {
@@ -350,7 +355,7 @@ async function api(req, res, url) {
 
   const inventoryItemMatch = url.pathname.match(/^\/api\/inventory\/items\/([^/]+)$/);
   if (req.method === 'PATCH' && inventoryItemMatch) {
-    if (!['admin','employee'].includes(user.role)) return json(res, 403, { error: 'No autorizado' });
+    if (!['admin','employee','seller'].includes(user.role)) return json(res, 403, { error: 'No autorizado' });
     try {
       const values = validatedInventoryItem(await body(req));
       const item = await mutateDb(db => {
@@ -375,7 +380,7 @@ async function api(req, res, url) {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/inventory/movements') {
-    if (!['admin','employee'].includes(user.role)) return json(res, 403, { error: 'No autorizado' });
+    if (!['admin','employee','seller'].includes(user.role)) return json(res, 403, { error: 'No autorizado' });
     const input = await body(req), type = clean(input.type, 10), itemId = clean(input.itemId, 100), destination = clean(input.destination, 40), note = clean(input.note, 40);
     if (!['entry','exit'].includes(type) || (type === 'exit' && !destination)) return json(res, 400, { error: 'Movimiento o destino inválido' });
     try {
@@ -420,7 +425,7 @@ async function api(req, res, url) {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/inventory/import') {
-    if (!['admin','employee'].includes(user.role)) return json(res, 403, { error: 'No autorizado para importar' });
+    if (!['admin','employee','seller'].includes(user.role)) return json(res, 403, { error: 'No autorizado para importar' });
     try {
       const input = await body(req), fileName = clean(input.fileName, 240), encoded = String(input.content || '');
       if (!fileName || !encoded || encoded.length > 10_000_000) return json(res, 400, { error: 'Archivo inválido o demasiado grande' });
@@ -448,6 +453,34 @@ async function api(req, res, url) {
       });
       return json(res, 201, result);
     } catch (error) { return json(res, error.status || 400, { error: error.message || 'No se pudo leer el archivo' }); }
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/tracking/status') {
+    if (user.role !== 'seller') return json(res, 403, { error: 'Sólo los vendedores comparten ubicación' });
+    const db = readDb(), session = (db.trackingSessions || []).find(item => item.userId === user.id && !item.endedAt);
+    return json(res, 200, { active: Boolean(session), session: session || null });
+  }
+  if (req.method === 'POST' && url.pathname === '/api/tracking/start') {
+    if (user.role !== 'seller') return json(res, 403, { error: 'Sólo los vendedores inician jornadas de ubicación' });
+    const session = await mutateDb(db => { const open = db.trackingSessions.find(item => item.userId === user.id && !item.endedAt); if (open) return open; const next = { id: crypto.randomUUID(), userId: user.id, startedAt: new Date().toISOString(), endedAt: null }; db.trackingSessions.push(next); return next; });
+    return json(res, 201, { session });
+  }
+  if (req.method === 'POST' && url.pathname === '/api/tracking/location') {
+    if (user.role !== 'seller') return json(res, 403, { error: 'No autorizado' });
+    const input = await body(req), latitude = Number(input.latitude), longitude = Number(input.longitude), accuracy = Number(input.accuracy);
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180 || !Number.isFinite(accuracy) || accuracy < 0 || accuracy > 100000) return json(res, 400, { error: 'Ubicación inválida' });
+    try { const point = await mutateDb(db => { const session = db.trackingSessions.find(item => item.userId === user.id && !item.endedAt); if (!session) throw Object.assign(new Error('Inicie la jornada antes de compartir ubicación'), { status: 409 }); const now = new Date(), cutoff = now.getTime() - 30 * 86400000; db.locationPoints = db.locationPoints.filter(item => Date.parse(item.recordedAt) >= cutoff); const next = { id: crypto.randomUUID(), sessionId: session.id, userId: user.id, latitude, longitude, accuracy: Math.round(accuracy), recordedAt: now.toISOString() }; db.locationPoints.push(next); return next; }); return json(res, 201, { point }); } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
+  if (req.method === 'POST' && url.pathname === '/api/tracking/stop') {
+    if (user.role !== 'seller') return json(res, 403, { error: 'No autorizado' });
+    await mutateDb(db => { const session = db.trackingSessions.find(item => item.userId === user.id && !item.endedAt); if (session) session.endedAt = new Date().toISOString(); }); return json(res, 200, { ok: true });
+  }
+  if (req.method === 'GET' && url.pathname === '/api/tracking/team') {
+    if (user.role !== 'admin') return json(res, 403, { error: 'Sólo el administrador puede monitorear vendedores' });
+    const db = readDb(), people = db.users.filter(item => item.active && item.role === 'seller').map(seller => { const session = db.trackingSessions.filter(item => item.userId === seller.id).sort((a,b) => b.startedAt.localeCompare(a.startedAt))[0] || null; const point = db.locationPoints.filter(item => item.userId === seller.id).sort((a,b) => b.recordedAt.localeCompare(a.recordedAt))[0] || null; return { user: publicUser(seller), active: Boolean(session && !session.endedAt), session, point, pointCount: db.locationPoints.filter(item => item.userId === seller.id).length }; }); return json(res, 200, { people });
+  }
+  if (req.method === 'GET' && url.pathname === '/api/tracking/history') {
+    const requestedId = clean(url.searchParams.get('userId'), 100) || user.id; if (user.role !== 'admin' && (user.role !== 'seller' || requestedId !== user.id)) return json(res, 403, { error: 'No autorizado' }); const points = readDb().locationPoints.filter(item => item.userId === requestedId).sort((a,b) => a.recordedAt.localeCompare(b.recordedAt)); return json(res, 200, { points });
   }
 
   if(user.role==='client'&&!url.pathname.startsWith('/api/chat/')&&!url.pathname.startsWith('/api/companies')&&!url.pathname.startsWith('/api/inventory')&&!url.pathname.startsWith('/api/products'))return json(res,403,{error:'Los clientes solo tienen acceso a su empresa, inventario y productos'});
@@ -503,7 +536,7 @@ async function api(req, res, url) {
     const db=readDb();
     if(user.role!=='admin'&&user.role!=='client')return json(res,403,{error:'No tiene acceso a empresas'});
     const allowed=user.role==='admin'?db.companies:db.companies.filter(company=>company.id===user.companyId);
-    return json(res,200,{companies:allowed.map(company=>{const conversation=db.conversations.find(item=>item.companyId===company.id);const participantIds=conversation?chatUserIds(db,conversation.id):[],memberIds=participantIds.filter(id=>db.users.some(item=>item.id===id&&['employee','admin'].includes(item.role)));return{...company,conversationId:conversation?.id||null,contacts:db.users.filter(item=>item.role==='client'&&item.companyId===company.id).map(publicUser).sort((a,b)=>a.name.localeCompare(b.name,'es')),memberIds,employeeIds:memberIds};}).sort((a,b)=>a.name.localeCompare(b.name,'es'))});
+    return json(res,200,{companies:allowed.map(company=>{const conversation=db.conversations.find(item=>item.companyId===company.id);const participantIds=conversation?chatUserIds(db,conversation.id):[],memberIds=participantIds.filter(id=>db.users.some(item=>item.id===id&&['employee','seller','admin'].includes(item.role)));return{...company,conversationId:conversation?.id||null,contacts:db.users.filter(item=>item.role==='client'&&item.companyId===company.id).map(publicUser).sort((a,b)=>a.name.localeCompare(b.name,'es')),memberIds,employeeIds:memberIds};}).sort((a,b)=>a.name.localeCompare(b.name,'es'))});
   }
 
   if(req.method==='GET'&&url.pathname==='/api/client-applications'){if(user.role!=='admin')return json(res,403,{error:'Solo el administrador puede revisar solicitudes'});const applications=(readDb().clientApplications||[]).filter(item=>item.status==='pending').map(item=>({id:item.id,status:item.status,company:item.company,contact:item.contact,username:item.username,createdAt:item.createdAt})).sort((a,b)=>a.createdAt.localeCompare(b.createdAt));return json(res,200,{applications});}
@@ -514,11 +547,11 @@ async function api(req, res, url) {
     if(user.role!=='admin')return json(res,403,{error:'Solo el administrador puede crear empresas'});
     const input=await body(req),applicationId=clean(input.applicationId,100),application=applicationId?(readDb().clientApplications||[]).find(item=>item.id===applicationId&&item.status==='pending'):null,sourceCompany=application?.company||input,sourceContact=application?{...application.contact,username:application.username}:input.contact||{},name=clean(sourceCompany.name,120),taxId=clean(sourceCompany.taxId,60),address=clean(sourceCompany.address,180),city=clean(sourceCompany.city,100),phone=clean(sourceCompany.phone,60),memberIds=[...new Set((Array.isArray(input.memberIds)?input.memberIds:Array.isArray(input.employeeIds)?input.employeeIds:[]).map(id=>clean(id,100)))],contactName=clean(sourceContact.name,100),username=clean(sourceContact.username,60).toLowerCase(),password=String(sourceContact.password||''),position=clean(sourceContact.position,100),contactPhone=clean(sourceContact.phone,60),email=clean(sourceContact.email,120);
     if(applicationId&&!application)return json(res,404,{error:'Solicitud pendiente no encontrada'});if(!name||memberIds.length<2||!contactName||!/^[a-z0-9._-]{3,60}$/i.test(username)||(!application&&password.length!==4))return json(res,400,{error:'Empresa, contacto y al menos dos empleados o administradores son obligatorios'});
-    try{const created=await mutateDb(db=>{if(db.companies.some(item=>item.name.toLowerCase()===name.toLowerCase()))throw Object.assign(new Error('Ya existe una empresa con ese nombre'),{status:409});if(db.users.some(item=>item.username.toLowerCase()===username))throw Object.assign(new Error('El usuario ya existe'),{status:409});if(memberIds.some(id=>!db.users.some(item=>item.id===id&&item.active&&['employee','admin'].includes(item.role))))throw Object.assign(new Error('Seleccione empleados o administradores activos'),{status:400});const pending=applicationId?(db.clientApplications||[]).find(item=>item.id===applicationId&&item.status==='pending'):null;if(applicationId&&!pending)throw Object.assign(new Error('Solicitud pendiente no encontrada'),{status:404});const now=new Date().toISOString(),company={id:crypto.randomUUID(),name,taxId,address,city,phone,status:'approved',createdAt:now,updatedAt:now},credentials=pending?{salt:pending.salt,hash:pending.passwordHash}:passwordHash(password),client={id:crypto.randomUUID(),name:contactName,username,role:'client',companyId:company.id,position,phone:contactPhone,email,active:true,salt:credentials.salt,passwordHash:credentials.hash,createdAt:now},conversation={id:crypto.randomUUID(),type:'group',title:name,companyId:company.id,createdBy:user.id,createdAt:now,updatedAt:now,pinnedBy:[],settings:{clientGroup:true}};db.companies.push(company);db.users.push(client);db.conversations.push(conversation);[client.id,...memberIds].forEach(userId=>db.conversationParticipants.push({id:crypto.randomUUID(),conversationId:conversation.id,userId,role:'member',joinedAt:now,lastReadAt:null,lastReadMessageId:null,muted:false}));if(pending){pending.status='approved';pending.reviewedAt=now;pending.reviewedBy=user.id;pending.companyId=company.id;}return{company,contact:publicUser(client),conversationId:conversation.id};});created.memberIds=memberIds;return json(res,201,created);}catch(error){return json(res,error.status||500,{error:error.message});}
+    try{const created=await mutateDb(db=>{if(db.companies.some(item=>item.name.toLowerCase()===name.toLowerCase()))throw Object.assign(new Error('Ya existe una empresa con ese nombre'),{status:409});if(db.users.some(item=>item.username.toLowerCase()===username))throw Object.assign(new Error('El usuario ya existe'),{status:409});if(memberIds.some(id=>!db.users.some(item=>item.id===id&&item.active&&['employee','seller','admin'].includes(item.role))))throw Object.assign(new Error('Seleccione integrantes internos activos'),{status:400});const pending=applicationId?(db.clientApplications||[]).find(item=>item.id===applicationId&&item.status==='pending'):null;if(applicationId&&!pending)throw Object.assign(new Error('Solicitud pendiente no encontrada'),{status:404});const now=new Date().toISOString(),company={id:crypto.randomUUID(),name,taxId,address,city,phone,status:'approved',createdAt:now,updatedAt:now},credentials=pending?{salt:pending.salt,hash:pending.passwordHash}:passwordHash(password),client={id:crypto.randomUUID(),name:contactName,username,role:'client',companyId:company.id,position,phone:contactPhone,email,active:true,salt:credentials.salt,passwordHash:credentials.hash,createdAt:now},conversation={id:crypto.randomUUID(),type:'group',title:name,companyId:company.id,createdBy:user.id,createdAt:now,updatedAt:now,pinnedBy:[],settings:{clientGroup:true}};db.companies.push(company);db.users.push(client);db.conversations.push(conversation);[client.id,...memberIds].forEach(userId=>db.conversationParticipants.push({id:crypto.randomUUID(),conversationId:conversation.id,userId,role:'member',joinedAt:now,lastReadAt:null,lastReadMessageId:null,muted:false}));if(pending){pending.status='approved';pending.reviewedAt=now;pending.reviewedBy=user.id;pending.companyId=company.id;}return{company,contact:publicUser(client),conversationId:conversation.id};});created.memberIds=memberIds;return json(res,201,created);}catch(error){return json(res,error.status||500,{error:error.message});}
   }
 
   const companyMatch=url.pathname.match(/^\/api\/companies\/([^/]+)$/);
-  if(req.method==='PATCH'&&companyMatch){if(user.role!=='admin')return json(res,403,{error:'Solo el administrador puede editar empresas'});const input=await body(req),name=clean(input.name,120),taxId=clean(input.taxId,60),address=clean(input.address,180),city=clean(input.city,100),phone=clean(input.phone,60),memberIds=[...new Set((Array.isArray(input.memberIds)?input.memberIds:Array.isArray(input.employeeIds)?input.employeeIds:[]).map(id=>clean(id,100)))];if(!name||memberIds.length<2)return json(res,400,{error:'Nombre y al menos dos empleados o administradores son obligatorios'});try{const company=await mutateDb(db=>{const found=db.companies.find(item=>item.id===companyMatch[1]);if(!found)throw Object.assign(new Error('Empresa no encontrada'),{status:404});if(memberIds.some(id=>!db.users.some(item=>item.id===id&&item.active&&['employee','admin'].includes(item.role))))throw Object.assign(new Error('Seleccione empleados o administradores activos'),{status:400});const conversation=db.conversations.find(item=>item.companyId===found.id);if(!conversation)throw Object.assign(new Error('Grupo de empresa no encontrado'),{status:404});found.name=name;found.taxId=taxId;found.address=address;found.city=city;found.phone=phone;found.updatedAt=new Date().toISOString();conversation.title=name;conversation.updatedAt=found.updatedAt;const contactIds=db.users.filter(item=>item.role==='client'&&item.companyId===found.id&&item.active).map(item=>item.id),keep=new Set([...contactIds,...memberIds]);db.conversationParticipants=db.conversationParticipants.filter(item=>item.conversationId!==conversation.id||keep.has(item.userId));for(const userId of keep)if(!chatParticipant(db,conversation.id,userId))db.conversationParticipants.push({id:crypto.randomUUID(),conversationId:conversation.id,userId,role:'member',joinedAt:found.updatedAt,lastReadAt:null,lastReadMessageId:null,muted:false});return found;});return json(res,200,{company});}catch(error){return json(res,error.status||500,{error:error.message});}}
+  if(req.method==='PATCH'&&companyMatch){if(user.role!=='admin')return json(res,403,{error:'Solo el administrador puede editar empresas'});const input=await body(req),name=clean(input.name,120),taxId=clean(input.taxId,60),address=clean(input.address,180),city=clean(input.city,100),phone=clean(input.phone,60),memberIds=[...new Set((Array.isArray(input.memberIds)?input.memberIds:Array.isArray(input.employeeIds)?input.employeeIds:[]).map(id=>clean(id,100)))];if(!name||memberIds.length<2)return json(res,400,{error:'Nombre y al menos dos integrantes internos son obligatorios'});try{const company=await mutateDb(db=>{const found=db.companies.find(item=>item.id===companyMatch[1]);if(!found)throw Object.assign(new Error('Empresa no encontrada'),{status:404});if(memberIds.some(id=>!db.users.some(item=>item.id===id&&item.active&&['employee','seller','admin'].includes(item.role))))throw Object.assign(new Error('Seleccione integrantes internos activos'),{status:400});const conversation=db.conversations.find(item=>item.companyId===found.id);if(!conversation)throw Object.assign(new Error('Grupo de empresa no encontrado'),{status:404});found.name=name;found.taxId=taxId;found.address=address;found.city=city;found.phone=phone;found.updatedAt=new Date().toISOString();conversation.title=name;conversation.updatedAt=found.updatedAt;const contactIds=db.users.filter(item=>item.role==='client'&&item.companyId===found.id&&item.active).map(item=>item.id),keep=new Set([...contactIds,...memberIds]);db.conversationParticipants=db.conversationParticipants.filter(item=>item.conversationId!==conversation.id||keep.has(item.userId));for(const userId of keep)if(!chatParticipant(db,conversation.id,userId))db.conversationParticipants.push({id:crypto.randomUUID(),conversationId:conversation.id,userId,role:'member',joinedAt:found.updatedAt,lastReadAt:null,lastReadMessageId:null,muted:false});return found;});return json(res,200,{company});}catch(error){return json(res,error.status||500,{error:error.message});}}
   if(req.method==='DELETE'&&companyMatch){if(user.role!=='admin')return json(res,403,{error:'Solo el administrador puede eliminar empresas'});try{await mutateDb(db=>{const companyId=companyMatch[1],index=db.companies.findIndex(item=>item.id===companyId);if(index<0)throw Object.assign(new Error('Empresa no encontrada'),{status:404});const conversationIds=db.conversations.filter(item=>item.companyId===companyId).map(item=>item.id),messageIds=db.messages.filter(item=>conversationIds.includes(item.conversationId)).map(item=>item.id),clientIds=db.users.filter(item=>item.companyId===companyId).map(item=>item.id);db.companies.splice(index,1);db.users=db.users.filter(item=>!clientIds.includes(item.id));db.conversations=db.conversations.filter(item=>!conversationIds.includes(item.id));db.conversationParticipants=db.conversationParticipants.filter(item=>!conversationIds.includes(item.conversationId));db.messages=db.messages.filter(item=>!conversationIds.includes(item.conversationId));db.attachments=db.attachments.filter(item=>!messageIds.includes(item.messageId));db.messageReceipts=db.messageReceipts.filter(item=>!messageIds.includes(item.messageId));db.pushSubscriptions=(db.pushSubscriptions||[]).filter(item=>!clientIds.includes(item.userId));});return json(res,200,{ok:true});}catch(error){return json(res,error.status||500,{error:error.message});}}
 
   const contactMatch=url.pathname.match(/^\/api\/companies\/([^/]+)\/contacts(?:\/([^/]+))?$/);

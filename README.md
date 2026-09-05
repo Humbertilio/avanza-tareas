@@ -18,6 +18,14 @@ Cada empleado debe pulsar **Activar notificaciones** una vez desde su propio tel
 
 El botón **Instalar aplicación** incluye un asistente para seleccionar iPhone, Android o computadora y muestra las instrucciones apropiadas para cada dispositivo.
 
+## Vendedores y monitoreo de ubicación
+
+El administrador puede crear cuentas con rol **Vendedor** desde la sección Empleados. Este rol conserva los mismos permisos operativos de un empleado y además dispone del módulo **Monitoreo** para iniciar o finalizar voluntariamente una jornada de ubicación.
+
+Mientras la jornada está activa, Avanza obtiene posiciones del GPS y las envía como máximo una vez cada 15 segundos. Sólo los administradores pueden consultar la última posición, hora, precisión y estado de los vendedores. Los puntos se conservan durante 30 días en las colecciones independientes `trackingSessions` y `locationPoints`.
+
+La geolocalización requiere HTTPS en producción (`localhost` funciona para pruebas), autorización explícita del vendedor y mantener Avanza abierta o activa. Los navegadores móviles pueden suspender una PWA en segundo plano; para seguimiento garantizado con la pantalla bloqueada será necesaria una aplicación móvil nativa.
+
 ## Puesta en marcha
 
 Requiere Node.js 18 o posterior.
