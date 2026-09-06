@@ -6,10 +6,11 @@ const path = require('path');
 const crypto = require('crypto');
 const webpush = require('web-push');
 const XLSX = require('xlsx');
+const fieldHandler = require('./field-visits').createHandler({ readDb, mutateDb, body, json });
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = process.env.AVANZA_DATA_DIR ? path.resolve(process.env.AVANZA_DATA_DIR) : path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'database.json');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const PRODUCTS_SEED_FILE = path.join(__dirname, 'seed', 'products.json');
@@ -285,6 +286,7 @@ async function api(req, res, url) {
 
   const user = requireUser(req, res);
   if (!user) return;
+  if (await fieldHandler(req, res, url, user)) return;
 
   if (req.method === 'GET' && url.pathname === '/api/me') return json(res, 200, { user: publicUser(user) });
 

@@ -26,6 +26,18 @@ Mientras la jornada está activa, Avanza obtiene posiciones del GPS y las envía
 
 La geolocalización requiere HTTPS en producción (`localhost` funciona para pruebas), autorización explícita del vendedor y mantener Avanza abierta o activa. Los navegadores móviles pueden suspender una PWA en segundo plano; para seguimiento garantizado con la pantalla bloqueada será necesaria una aplicación móvil nativa.
 
+## Clientes y visitas
+
+El menú **Visitas** está disponible para administradores y vendedores. Todos ven las empresas existentes y los clientes nuevos en una lista y un mapa compacto. Las empresas sin coordenadas se muestran como **Sin ubicación**; se pueden ubicar con el GPS, coordenadas o un punto elegido en el mapa. Los vendedores pueden completar ubicaciones vacías; solo un administrador puede corregir una ubicación existente.
+
+Cada vendedor puede agregar clientes y registrar llegada, salida, resultado y notas. Una visita en curso debe finalizarse antes de iniciar otra. Cuando no se obtiene GPS, o la llegada está a más de 200 metros del cliente, se solicita un motivo. Las visitas conservan la hora del celular y la fecha de recepción del servidor. Los clientes nuevos no crean automáticamente cuentas de acceso o grupos de chat.
+
+**Jornada** permite consultar una fecha; el administrador también elige vendedor. Las paradas se numeran por llegada y se unen con líneas discontinuas: estas líneas no son calles recorridas ni una ruta optimizada. Las llegadas sin GPS permanecen en la lista. El monitoreo GPS anterior continúa en su propio módulo.
+
+Para trabajar sin internet, inicia sesión y abre **Visitas** con conexión una vez en ese dispositivo. La aplicación conserva los clientes y los registros en el almacenamiento local del navegador, separados por cuenta. Se puede reabrir sin señal usando la última sesión local; enviar datos siempre requiere una sesión válida en el servidor. El botón **Sincronizar**, la recuperación de conexión y un reintento cada 30 segundos mientras Avanza permanece abierta procesan la cola. Cada operación tiene un identificador estable para evitar duplicados si se pierde la respuesta. Si la sesión vence, hay que iniciar sesión de nuevo; los registros pendientes se conservan. No borres los datos del navegador mientras existan pendientes.
+
+El mapa base necesita internet; no se descargan zonas para uso sin conexión. La lista, los formularios y los registros sí funcionan sin señal. No se garantiza sincronización con la aplicación cerrada. La geolocalización necesita HTTPS o localhost. Las pruebas automáticas del módulo se ejecutan con `node --test tests/*.test.cjs`; no usan la base de datos de trabajo.
+
 ## Puesta en marcha
 
 Requiere Node.js 18 o posterior.

@@ -11,7 +11,7 @@ window.addEventListener('appinstalled', () => { installPrompt = null; $('#instal
 async function request(url, options = {}) {
   const response = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'No se pudo completar la operación');
+  if (!response.ok) throw Object.assign(new Error(data.error || 'No se pudo completar la operación'), {status:response.status});
   return data;
 }
 function toast(message) { const node = $('#toast'); node.textContent = message; node.classList.add('show'); setTimeout(() => node.classList.remove('show'), 2600); }
@@ -22,13 +22,19 @@ function dueDateText(value) { if (!value) return 'Sin fecha'; const [year,month,
 
 async function boot() {
   try { me = (await request('/api/me')).user; await enterApp(); }
-  catch { $('#loginView').classList.remove('hidden'); }
+  catch (error) {
+    let saved=null;try{saved=JSON.parse(localStorage.getItem('avanza-offline-user'));}catch{}
+    if(!error.status && saved && ['admin','seller'].includes(saved.role)) { me=saved; await enterApp(true); }
+    else $('#loginView').classList.remove('hidden');
+  }
 }
-async function enterApp() {
+async function enterApp(offline = false) {
+  if (!offline) localStorage.setItem('avanza-offline-user', JSON.stringify(me));
   $('#loginView').classList.add('hidden'); $('#appView').classList.remove('hidden');
   $('#profileName').textContent = me.name; $('#profileRole').textContent = me.role === 'admin' ? 'Administrador' : me.role==='client'?'Cliente':me.role==='seller'?'Vendedor':'Empleado'; $('#avatar').textContent = initials(me.name);
   if (me.role === 'admin') { $('#usersNav').classList.remove('hidden');$('#clientsNav').classList.remove('hidden'); }
-  if (['admin','seller'].includes(me.role)) $('.tracking-nav').classList.remove('hidden');
+  if (['admin','seller'].includes(me.role)) { $('.tracking-nav').classList.remove('hidden'); $('.visits-nav').classList.remove('hidden'); }
+  if (offline) { showView('visits', false); return; }
   if(me.role==='client'){$$('.employee-nav').forEach(node=>node.classList.add('hidden'));const clientView=['#inventory','#products'].includes(location.hash)?location.hash.slice(1):'chat';history.replaceState({view:clientView},'',`#${clientView}`);showView(clientView,false);return;}
   await refresh(); history.replaceState({ view: 'tasks' }, '', '#tasks'); showView('tasks', false);
 }
@@ -94,7 +100,7 @@ function closeDescription() { $('#descriptionModal').classList.add('hidden'); }
 async function acknowledgeTask(id) { try { await request(`/api/tasks/${id}/acknowledge`,{method:'POST'});await refresh();toast('Lectura confirmada'); } catch(error){toast(error.message);} }
 async function updateStatus(event) { try { await request(`/api/tasks/${event.target.dataset.id}/status`, { method: 'PATCH', body: JSON.stringify({ progress: Number(event.target.value) }) }); await refresh(); toast('Estado actualizado'); } catch (error) { toast(error.message); await refresh(); } }
 async function deleteTask(id) { if(!confirm('¿Eliminar esta tarea definitivamente?'))return;try{await request(`/api/tasks/${id}`,{method:'DELETE'});await refresh();toast('Tarea eliminada');}catch(error){toast(error.message);} }
-function showView(name, addHistory = true) { ['tasks','all','new','machines','tracking','inventory','products','chat','clients','users'].forEach(x => $(`#${x}View`).classList.toggle('hidden', x !== name)); $$('.nav').forEach(x => x.classList.toggle('active', x.dataset.view === name)); $('.mobile-new').classList.toggle('hidden', ['machines','tracking','inventory','products','chat','clients','users'].includes(name)); $('#greeting').textContent = name === 'tasks' ? 'Tus tareas' : name === 'all' ? 'Todas las tareas' : name === 'new' ? 'Crear una tarea' : name === 'machines' ? 'Maquinarias' : name === 'tracking' ? (me.role==='admin'?'Monitoreo de vendedores':'Mi ubicación') : name === 'inventory' ? 'Inventario' : name === 'products' ? 'Productos' : name === 'chat' ? 'Chat' : name==='clients'?'Clientes':'Gestión del equipo'; const sameScreen=history.state?.view===name&&!history.state?.machineId&&!history.state?.conversationId;if(addHistory&&!sameScreen)history.pushState({view:name},'',`#${name}`);if(name==='machines')window.loadMachinery?.();if(name==='tracking')window.loadTracking?.();if(name==='inventory')window.loadInventory?.();if(name==='products')window.loadProducts?.();if(name==='chat')window.loadChat?.();if(name==='clients')window.loadClients?.(); }
+function showView(name, addHistory = true) { ['tasks','all','new','machines','tracking','visits','inventory','products','chat','clients','users'].forEach(x => $(`#${x}View`).classList.toggle('hidden', x !== name)); $$('.nav').forEach(x => x.classList.toggle('active', x.dataset.view === name)); $('.mobile-new').classList.toggle('hidden', ['machines','tracking','visits','inventory','products','chat','clients','users'].includes(name)); $('#greeting').textContent = name === 'tasks' ? 'Tus tareas' : name === 'all' ? 'Todas las tareas' : name === 'new' ? 'Crear una tarea' : name === 'machines' ? 'Maquinarias' : name === 'visits' ? 'Clientes y visitas' : name === 'tracking' ? (me.role==='admin'?'Monitoreo de vendedores':'Mi ubicación') : name === 'inventory' ? 'Inventario' : name === 'products' ? 'Productos' : name === 'chat' ? 'Chat' : name==='clients'?'Clientes':'Gestión del equipo'; const sameScreen=history.state?.view===name&&!history.state?.machineId&&!history.state?.conversationId;if(addHistory&&!sameScreen)history.pushState({view:name},'',`#${name}`);if(name==='machines')window.loadMachinery?.();if(name==='tracking')window.loadTracking?.();if(name==='visits')window.loadVisits?.();if(name==='inventory')window.loadInventory?.();if(name==='products')window.loadProducts?.();if(name==='chat')window.loadChat?.();if(name==='clients')window.loadClients?.(); }
 window.showAvanzaView=showView;
 function closeInstall() { $('#installModal').classList.add('hidden'); }
 function showDeviceInstructions(device) {
@@ -115,7 +121,7 @@ $$('#clientRequestForm input[name="companyPhone"],#clientRequestForm input[name=
 $('#clientRequestForm').addEventListener('submit',async event=>{event.preventDefault();const form=event.target,message=form.querySelector('.formMessage'),values=Object.fromEntries(new FormData(form));message.textContent='';try{await request('/api/client-applications',{method:'POST',body:JSON.stringify({company:{name:values.companyName,taxId:values.taxId,address:values.address,city:values.city,phone:values.companyPhone},contact:{name:values.name,position:values.position,phone:values.phone,email:values.email,username:values.username,password:values.password}})});form.reset();message.style.color='#217346';message.textContent='Solicitud enviada. El administrador debe aprobarla antes de que puedas ingresar.';}catch(error){message.style.color='';message.textContent=error.message;}});
 $('#installApp').addEventListener('click',()=>{$('#installModal').classList.remove('hidden');const detected=/iphone|ipad|ipod/i.test(navigator.userAgent)?'iphone':/android/i.test(navigator.userAgent)?'android':'computer';showDeviceInstructions(detected);});
 $('#closeInstall').addEventListener('click',closeInstall);$('#installModal').addEventListener('click',event=>{if(event.target===$('#installModal'))closeInstall();});$$('.device-options button').forEach(button=>button.addEventListener('click',()=>showDeviceInstructions(button.dataset.device)));
-async function logout(){await request('/api/logout',{method:'POST'});location.reload();}
+async function logout(){await request('/api/logout',{method:'POST'});localStorage.removeItem('avanza-offline-user');location.reload();}
 $('#logout').addEventListener('click',logout);$('#mobileLogout').addEventListener('click',logout);
 $$('[data-view]').forEach(button => button.addEventListener('click', () => showView(button.dataset.view)));
 $('#taskForm').addEventListener('submit', async event => { event.preventDefault(); const msg=event.target.querySelector('.formMessage'); msg.textContent=''; try { await request('/api/tasks',{method:'POST',body:JSON.stringify(Object.fromEntries(new FormData(event.target)))}); event.target.reset(); await refresh(); showView('tasks'); toast('Tarea creada y asignada'); } catch(error){msg.textContent=error.message;} });
