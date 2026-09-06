@@ -20,7 +20,7 @@ El botón **Instalar aplicación** incluye un asistente para seleccionar iPhone,
 
 ## Vendedores y monitoreo de ubicación
 
-El administrador puede crear cuentas con rol **Vendedor** desde la sección Empleados. Este rol conserva los mismos permisos operativos de un empleado y además dispone del módulo **Monitoreo** para iniciar o finalizar voluntariamente una jornada de ubicación.
+El administrador puede crear cuentas con rol **Vendedor** desde la sección Empleados. Este rol conserva los mismos permisos operativos de un empleado y además dispone del módulo **Jornada** para iniciar o finalizar voluntariamente una jornada de ubicación.
 
 Mientras la jornada está activa, Avanza obtiene posiciones del GPS y las envía como máximo una vez cada 15 segundos. Sólo los administradores pueden consultar la última posición, hora, precisión y estado de los vendedores. Los puntos se conservan durante 30 días en las colecciones independientes `trackingSessions` y `locationPoints`.
 
@@ -28,13 +28,13 @@ La geolocalización requiere HTTPS en producción (`localhost` funciona para pru
 
 ## Clientes y visitas
 
-El menú **Visitas** está disponible para administradores y vendedores. Todos ven las empresas existentes y los clientes nuevos en una lista y un mapa compacto. Las empresas sin coordenadas se muestran como **Sin ubicación**; se pueden ubicar con el GPS, coordenadas o un punto elegido en el mapa. Los vendedores pueden completar ubicaciones vacías; solo un administrador puede corregir una ubicación existente.
+El menú único **Jornada** está disponible para administradores y vendedores. Todos ven las empresas existentes y los clientes nuevos en una lista y un mapa compacto. Las empresas sin coordenadas se muestran como **Sin ubicación**; se pueden ubicar con el GPS, coordenadas o un punto elegido en el mapa. Los vendedores pueden completar ubicaciones vacías; solo un administrador puede corregir una ubicación existente.
 
 Cada vendedor puede agregar clientes y registrar llegada, salida, resultado y notas. Una visita en curso debe finalizarse antes de iniciar otra. Cuando no se obtiene GPS, o la llegada está a más de 200 metros del cliente, se solicita un motivo. Las visitas conservan la hora del celular y la fecha de recepción del servidor. Los clientes nuevos no crean automáticamente cuentas de acceso o grupos de chat.
 
-**Jornada** permite consultar una fecha; el administrador también elige vendedor. Las paradas se numeran por llegada y se unen con líneas discontinuas: estas líneas no son calles recorridas ni una ruta optimizada. Las llegadas sin GPS permanecen en la lista. El monitoreo GPS anterior continúa en su propio módulo.
+**Visitas del día** permite consultar las paradas de una fecha; el administrador también elige vendedor. Las paradas se numeran por llegada y se unen con líneas discontinuas: estas líneas no son calles recorridas ni una ruta optimizada. Las llegadas sin GPS permanecen en la lista. El monitoreo GPS está integrado en el mismo mapa: azul para el recorrido registrado y el vendedor, naranja para clientes y líneas discontinuas entre visitas. Se puede elegir vendedor y fecha, y ocultar cada capa. Los trazos GPS se separan entre sesiones y ante interrupciones de más de dos minutos.
 
-Para trabajar sin internet, inicia sesión y abre **Visitas** con conexión una vez en ese dispositivo. La aplicación conserva los clientes y los registros en el almacenamiento local del navegador, separados por cuenta. Se puede reabrir sin señal usando la última sesión local; enviar datos siempre requiere una sesión válida en el servidor. El botón **Sincronizar**, la recuperación de conexión y un reintento cada 30 segundos mientras Avanza permanece abierta procesan la cola. Cada operación tiene un identificador estable para evitar duplicados si se pierde la respuesta. Si la sesión vence, hay que iniciar sesión de nuevo; los registros pendientes se conservan. No borres los datos del navegador mientras existan pendientes.
+Para trabajar sin internet, inicia sesión y abre **Jornada** con conexión una vez en ese dispositivo. La aplicación conserva los clientes y los registros en el almacenamiento local del navegador, separados por cuenta. Se puede reabrir sin señal usando la última sesión local; enviar datos siempre requiere una sesión válida en el servidor. El botón **Sincronizar**, la recuperación de conexión y un reintento cada 30 segundos mientras Avanza permanece abierta procesan la cola. Cada operación tiene un identificador estable para evitar duplicados si se pierde la respuesta. Si la sesión vence, hay que iniciar sesión de nuevo; los registros pendientes se conservan. No borres los datos del navegador mientras existan pendientes.
 
 El mapa base necesita internet; no se descargan zonas para uso sin conexión. La lista, los formularios y los registros sí funcionan sin señal. No se garantiza sincronización con la aplicación cerrada. La geolocalización necesita HTTPS o localhost. Las pruebas automáticas del módulo se ejecutan con `node --test tests/*.test.cjs`; no usan la base de datos de trabajo.
 
@@ -84,3 +84,5 @@ El modelo de datos está separado en las siguientes colecciones:
 - `calls`: colección reservada para futuras llamadas.
 
 Esta separación permite añadir posteriormente grupos, respuestas, reenvíos, eliminación, fijado, búsqueda, notas de voz y llamadas sin mezclar los mensajes con las tareas de empleados o maquinarias.
+
+En Jornada, el vendedor inicia o finaliza su seguimiento desde la misma pantalla. El administrador consulta al equipo sin activar GPS en su dispositivo. Si falla el envío del cierre, el GPS se detiene en el celular y la intención de cierre se conserva para reintentar al recuperar conexión. La actualización del monitoreo se realiza cada 30 segundos mientras la pantalla está abierta.

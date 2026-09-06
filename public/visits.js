@@ -3,6 +3,8 @@
   'use strict';
   const q = s => document.querySelector(s), esc = escapeHtml;
   let map, layers, selected = '', mode = 'clients', search = '', seller = '', day = today(), syncing = false, busy = false, mapPicking = false, lastError = '';
+  let gpsLayers, journey = null, journeyError = '', journeyRequest = 0, fitNext = true;
+  const visibleLayers = {clients:true, seller:true, route:true};
   const empty = () => ({ clients: [], visits: [], sellers: [], lastVisits: {}, pending: [] });
   const key = () => `avanza-visits-v1:${me.id}`;
   function read() { const raw = localStorage.getItem(key()); return raw ? { ...empty(), ...JSON.parse(raw) } : empty(); }
@@ -62,8 +64,8 @@
     node.classList.toggle('warning', Boolean(s.pending.length || lastError));
   }
   function mount() {
-    q('#visitsView').innerHTML = `<div class="visit-toolbar"><h2>Clientes y visitas</h2><div class="visit-actions"><button id="visitNew" class="primary">＋ Cliente</button><button id="visitSync">Sincronizar</button></div></div><p id="visitStatus" class="visit-status" role="status"></p><div class="visit-filters"><button class="visit-mode" data-mode="clients">Clientes</button><button class="visit-mode" data-mode="day">Jornada</button><input id="visitSearch" type="search" aria-label="Buscar cliente o zona" placeholder="Cliente o zona"><input id="visitDay" type="date" aria-label="Fecha de jornada"><select id="visitSeller" aria-label="Vendedor"></select></div><div class="visit-workspace"><div id="visitList" class="visit-list"></div><div class="visit-map-panel"><div id="visitMap" class="visit-map" aria-label="Mapa de clientes"></div><p id="visitCaption" class="visit-caption"></p><div id="visitDetail" class="visit-detail"></div></div></div><dialog id="visitDialog" class="visit-dialog"></dialog>`;
-    map = L.map('visitMap').setView([-16.5,-68.15], 12); layers = L.featureGroup().addTo(map);
+    q('#visitsView').innerHTML = `<div class="visit-toolbar"><h2>Jornada</h2><div class="visit-actions"><button id="visitNew" class="primary">＋ Cliente</button><button id="visitSync">Sincronizar</button></div></div><div class="journey-controls"><span id="journeyState" class="journey-state" role="status">Cargando jornada…</span><button id="journeyToggle" hidden>Iniciar jornada</button><span id="journeySignal" role="status"></span></div><p id="visitStatus" class="visit-status" role="status"></p><div class="visit-filters"><button class="visit-mode" data-mode="clients">Clientes</button><button class="visit-mode" data-mode="day">Visitas del día</button><input id="visitSearch" type="search" aria-label="Buscar cliente o zona" placeholder="Cliente o zona"><input id="visitDay" type="date" aria-label="Fecha de jornada"><select id="visitSeller" aria-label="Vendedor"></select></div><div id="journeyLayers" class="journey-layers"><label><input type="checkbox" value="clients" checked> Clientes</label><label><input type="checkbox" value="seller" checked> Vendedor</label><label><input type="checkbox" value="route" checked> Recorrido GPS</label><button id="journeyFit">Ver todo</button></div><div class="visit-workspace"><div id="visitList" class="visit-list"></div><div class="visit-map-panel"><div id="visitMap" class="visit-map" aria-label="Mapa de clientes"></div><p id="journeyLegend" class="visit-caption"></p><p id="visitCaption" class="visit-caption"></p><div id="visitDetail" class="visit-detail"></div></div></div><p class="journey-help">GPS solo durante una jornada iniciada por el vendedor. Mantén Avanza abierta; puede haber intervalos sin señal. Ubicaciones GPS conservadas durante 30 días.</p><dialog id="visitDialog" class="visit-dialog"></dialog>`;
+    map = L.map('visitMap').setView([-16.5,-68.15], 12); layers = L.featureGroup().addTo(map); gpsLayers = L.featureGroup().addTo(map);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(map).on('tileerror', () => { q('#visitCaption').textContent = 'Mapa base no disponible. Puedes registrar visitas desde la lista.'; });
     map.on('click', e => {
       if (!mapPicking) return; mapPicking = false;
@@ -72,10 +74,13 @@
       dialog.querySelector('[name=longitude]').value = e.latlng.lng.toFixed(6);
       q('#visitCaption').textContent = 'Ubicación seleccionada';
     });
-    q('#visitNew').onclick = () => clientDialog(); q('#visitSync').onclick = sync;
+    q('#visitNew').onclick = () => clientDialog(); q('#visitSync').onclick = () => {void sync();void refreshJourney();};
     q('#visitSearch').oninput = e => { search=e.target.value; renderRows(); };
-    q('#visitDay').onchange = e => { day=e.target.value; renderRows(); };
-    q('#visitSeller').onchange = e => { seller=e.target.value; renderRows(); };
+    q('#visitDay').onchange = e => { day=e.target.value; fitNext=true;renderRows(); };
+    q('#visitSeller').onchange = e => { seller=e.target.value; journey=null;fitNext=true;renderRows();void refreshJourney(); };
+    q('#journeyToggle').onclick = () => window.journeyTracking.toggle();
+    q('#journeyFit').onclick = () => {fitNext=true;renderRows();};
+    q('#journeyLayers').querySelectorAll('input').forEach(input => input.onchange=()=>{visibleLayers[input.value]=input.checked;renderRows();});
     document.querySelectorAll('[data-mode]').forEach(b => b.onclick=() => { mode=b.dataset.mode; render(); });
   }
   function render() {
@@ -84,10 +89,10 @@
     const s = projected(read());
     if (!seller) seller=me.id;
     q('#visitSeller').innerHTML = s.sellers.map(u => `<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('');
-    q('#visitSeller').value=seller; q('#visitSeller').hidden=mode!=='day'||me.role!=='admin';
-    q('#visitDay').value=day; q('#visitDay').hidden=mode!=='day';
+    q('#visitSeller').value=seller; q('#visitSeller').hidden=me.role!=='admin';
+    q('#visitDay').value=day; q('#visitDay').hidden=false;
     document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed',String(b.dataset.mode===mode)));
-    status(); renderRows(); setTimeout(() => map.invalidateSize(),0);
+    status(); renderRows(); journeyStatus(); setTimeout(() => map.invalidateSize(),0);
   }
   function renderRows() {
     const s = projected(read()), normalized = search.trim().toLocaleLowerCase('es');
@@ -103,15 +108,58 @@
     layers.clearLayers();
     const route=[];
     rows.forEach(({c,v,i}) => {
-      const p=mode==='day'?v.point:c.point; if (!p) return;
+      const p=mode==='day'?v.point:c.point; if (!p || !visibleLayers.clients) return;
       const marker=L.marker(latlng(p), {icon:L.divIcon({className:'visit-pin',html:mode==='day'?String(i+1):'•',iconSize:[30,30]})}).addTo(layers);
       marker.bindTooltip(esc(c.name)); marker.on('click',()=>{selected=c.id;detail(s);});
       if(mode==='day')route.push(latlng(p));
     });
-    if(mode==='day' && route.length>1)L.polyline(route,{color:'#1761b1',weight:3,dashArray:'6 7'}).addTo(layers);
-    if(layers.getLayers().length) map.fitBounds(layers.getBounds(),{padding:[24,24],maxZoom:16});
+    if(mode==='day' && visibleLayers.clients && route.length>1)L.polyline(route,{color:'#e56c36',weight:2,dashArray:'6 7'}).addTo(layers);
+    drawJourney();
     q('#visitCaption').textContent=mapPicking?'Toca el mapa para elegir la ubicación.':mode==='day'?`${visits.length} visitas · Líneas entre llegadas registradas; no representan las calles recorridas.`:`${matching.length} clientes · ${matching.filter(c=>!located(c)).length} sin ubicación. El mapa base necesita internet.`;
     detail(s);
+  }
+  function journeyStatus() {
+    if(!q('#journeyState'))return;
+    const state=window.journeyTracking.state(), person=journey?.person;
+    const isActive=me.role==='seller'?state.active:person?.active;
+    q('#journeyState').textContent=journeyError?'Estado sin actualizar':state.pendingStop?'Cierre pendiente':isActive?'Jornada activa':person||isActive===false?'Jornada detenida':'Sin jornada registrada';
+    q('#journeyState').classList.toggle('active',Boolean(isActive)&&!journeyError);
+    const toggle=q('#journeyToggle');toggle.hidden=me.role!=='seller';toggle.disabled=state.changing;
+    toggle.textContent=state.changing?'Procesando…':state.pendingStop?'Reintentar cierre':state.active?'Finalizar jornada':'Iniciar jornada';
+    q('#journeySignal').textContent=journeyError||(me.role==='seller'?state.signal:'')||(journey?.loadedAt?'Monitoreo actualizado '+date(journey.loadedAt):'');
+  }
+  async function refreshJourney() {
+    if(!me||!['seller','admin'].includes(me.role)||!q('#visitMap'))return;
+    const requestId=++journeyRequest, userId=seller||me.id;
+    try {
+      const data=await window.journeyTracking.load(userId);
+      if(requestId!==journeyRequest||userId!==seller)return;
+      journey=data;journeyError='';
+    } catch(error) {if(requestId!==journeyRequest)return;journeyError=error.status===401?'Inicia sesión para actualizar el monitoreo.':'No se pudo actualizar el GPS. Los datos visibles pueden estar desactualizados.';}
+    journeyStatus();drawJourney();
+  }
+  function drawJourney() {
+    if(!gpsLayers)return;
+    gpsLayers.clearLayers();
+    const points=(journey?.points||[]).filter(p=>today(p.recordedAt)===day);
+    // Do not connect different sessions or long gaps as a continuous GPS trace.
+    if(visibleLayers.route) {
+      let segment=[];
+      const flush=()=>{if(segment.length>1)L.polyline(segment.map(latlng),{color:'#2563eb',weight:4}).addTo(gpsLayers);segment=[];};
+      for(const p of points){const prior=segment[segment.length-1];if(prior&&(p.sessionId!==prior.sessionId||Date.parse(p.recordedAt)-Date.parse(prior.recordedAt)>120000))flush();segment.push(p);}flush();
+    }
+    const latest=points[points.length-1];
+    if(visibleLayers.seller&&latest) {
+      const name=journey?.person?.user?.name||projected(read()).sellers.find(u=>u.id===seller)?.name||'Vendedor';
+      L.circleMarker(latlng(latest),{radius:9,color:'#fff',weight:3,fillColor:'#2563eb',fillOpacity:1}).addTo(gpsLayers).bindTooltip(`${esc(name)} · ${date(latest.recordedAt)} · ±${Math.round(latest.accuracy)} m`);
+    }
+    q('#journeyLegend').textContent=`● Clientes / llegadas · ● Vendedor · Azul: GPS (${points.length} puntos) · Naranja discontinuo: orden de visitas`;
+    if(fitNext) {
+      const bounds=L.latLngBounds([]);
+      if(layers.getLayers().length)bounds.extend(layers.getBounds());
+      if(gpsLayers.getLayers().length)bounds.extend(gpsLayers.getBounds());
+      if(bounds.isValid()){map.fitBounds(bounds,{padding:[24,24],maxZoom:16});fitNext=false;}
+    }
   }
   function detail(s) {
     const c=s.clients.find(c=>c.id===selected), node=q('#visitDetail');
@@ -157,7 +205,10 @@
   function finishDialog(id) {
     dialog('Finalizar visita',`<label>Resultado<select name="result" required><option value="">Selecciona</option>${['Pedido realizado','Sin pedido','Cliente cerrado','Volver otro día'].map(v=>`<option>${v}</option>`).join('')}</select></label><label>Nota (opcional)<textarea name="note" rows="2" maxlength="1000"></textarea></label>`,async form=>{await enqueue('finish',{id,endedAt:new Date().toISOString(),...Object.fromEntries(new FormData(form))});toast('Visita finalizada');});
   }
-  window.loadVisits=()=>{try{render();void sync();}catch(error){toast('No se pudo abrir el almacenamiento de visitas: '+error.message);}};
+  window.refreshJourney=refreshJourney;
+  window.addEventListener('journey-signal',journeyStatus);
+  window.loadVisits=()=>{try{fitNext=true;render();void sync();void refreshJourney();}catch(error){toast('No se pudo abrir el almacenamiento de visitas: '+error.message);}};
+  setInterval(()=>{if(me&&q('#visitsView')&&!q('#visitsView').classList.contains('hidden')){void refreshJourney();if(!syncing)void sync();}},30000);
   window.addEventListener('online',()=>{if(me)void sync();});
   window.addEventListener('offline',()=>{lastError='Sin conexión. Puedes registrar visitas; el mapa base puede no estar disponible.';if(me&&q('#visitStatus'))status();});
   window.addEventListener('storage',e=>{if(me&&e.key===key()&&q('#visitMap'))render();});
