@@ -5,7 +5,31 @@
   const root=()=>document.querySelector('#productsRoot');
   const safe=value=>escapeHtml(String(value??''));
   const price=value=>value===null||value===undefined||value===''?'—':safe(Number(value).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}));
-  async function load(){state.products=(await request('/api/products')).products;render();}
+  async function load(){state.products=(await request('/api/products')).products;if(me.role==='client'){renderOrder();return;}render();}
+  let draft={userId:null,quantities:{},review:false,requestId:null,sending:false,search:''};
+  function selected(){return state.products.filter(p=>Number(draft.quantities[p.id])>0);}
+  function renderOrder(){
+    if(draft.userId!==me.id)draft={userId:me.id,quantities:{},review:false,requestId:null,sending:false,search:''};
+    const chosen=selected(),rows=draft.review?chosen:state.products;
+    root().innerHTML=`<div class="order-heading"><strong>${safe(me.name)} · ${safe(me.phone||'Teléfono no registrado')}</strong><h2>${draft.review?'Revisar selección':'Pedido de productos'}</h2><p>${draft.review?'Revise el pedido antes de enviarlo al grupo de su empresa.':'Asigne cantidades a los productos que desea pedir.'}</p></div>${draft.review?'':`<input id="orderSearch" type="search" placeholder="Buscar producto" aria-label="Buscar producto" value="${safe(draft.search)}">`}<form id="productOrderForm"><div class="products-sheet order-sheet"><table><thead><tr><th>Producto</th><th>Cantidad</th><th>precio3</th>${draft.review?'<th>Importe</th>':''}</tr></thead><tbody>${rows.map(p=>`<tr data-order-product="${safe(p.id)}"><td>${safe(p.product)}</td><td>${draft.review?safe(draft.quantities[p.id]):`<input type="number" min="0" max="1000000" step="0.001" inputmode="decimal" data-order-quantity="${safe(p.id)}" aria-label="Cantidad de ${safe(p.product)}" value="${safe(draft.quantities[p.id]??'')}" ${p.price3===null||p.price3===undefined?'disabled':''}>`}</td><td>${price(p.price3)}</td>${draft.review?`<td>${price(Math.round(Number(draft.quantities[p.id])*p.price3*100)/100)}</td>`:''}</tr>`).join('')}</tbody></table>${rows.length?'':'<p class="products-empty">No hay productos seleccionados.</p>'}</div><div class="order-actions">${draft.review?`<strong>Total: ${price(chosen.reduce((sum,p)=>sum+Math.round(Number(draft.quantities[p.id])*p.price3*100)/100,0))}</strong><button type="button" id="orderBack">Volver al listado</button><button class="primary" ${draft.sending||!chosen.length?'disabled':''}>${draft.sending?'Enviando…':'Confirmar y enviar pedido'}</button>`:`<span id="orderCount">${chosen.length} productos seleccionados</span><button class="primary">Revisar selección</button>`}</div><p id="orderError" role="alert"></p></form>`;
+    const filter=()=>root().querySelectorAll('[data-order-product]').forEach(row=>{const p=state.products.find(p=>p.id===row.dataset.orderProduct);row.hidden=!p.product.toLowerCase().includes(draft.search.toLowerCase());});
+    root().querySelector('#orderSearch')?.addEventListener('input',event=>{draft.search=event.target.value;filter();});
+    if(!draft.review)filter();
+    root().querySelectorAll('[data-order-quantity]').forEach(input=>input.addEventListener('input',()=>{draft.quantities[input.dataset.orderQuantity]=input.value;draft.requestId=null;root().querySelector('#orderCount').textContent=`${selected().length} productos seleccionados`;}));
+    root().querySelector('#orderBack')?.addEventListener('click',async()=>{if(draft.sending)return;draft.review=false;try{await load();}catch(error){renderOrder();root().querySelector('#orderError').textContent=error.message;}});
+    root().querySelector('#productOrderForm').addEventListener('submit',async event=>{
+      event.preventDefault();if(draft.sending)return;
+      if(!selected().length){root().querySelector('#orderError').textContent='Asigne cantidad a al menos un producto.';return;}
+      if(!draft.review){draft.review=true;renderOrder();return;}
+      draft.requestId ||= crypto.randomUUID();draft.sending=true;renderOrder();
+      try{
+        const result=await request('/api/products/orders',{method:'POST',body:JSON.stringify({requestId:draft.requestId,items:selected().map(p=>({productId:p.id,quantity:Number(draft.quantities[p.id]),price3:p.price3}))})});
+        draft.quantities={};draft.requestId=null;draft.review=false;draft.sending=false;renderOrder();
+        const confirmation=document.createElement('p');confirmation.className='order-success';confirmation.setAttribute('role','status');confirmation.textContent=`Pedido ${result.order.number} enviado al grupo de su empresa con el Excel editable. `;
+        const link=document.createElement('a');link.href=`/#chat/${encodeURIComponent(result.order.conversationId)}`;link.textContent='Ver pedido en el chat';confirmation.appendChild(link);root().prepend(confirmation);
+      }catch(error){draft.sending=false;renderOrder();root().querySelector('#orderError').textContent=error.message;}
+    });
+  }
   function visible(){return state.products.slice().sort((a,b)=>{const left=a[state.sort.key],right=b[state.sort.key],result=typeof left==='number'&&typeof right==='number'?left-right:String(left??'').localeCompare(String(right??''),'es',{numeric:true,sensitivity:'base'});return result*state.sort.dir;});}
   function input(key,value='',prefix=''){const shown=key.startsWith('price')&&value!==''&&value!==null&&value!==undefined?Number(value).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):value;return `<input ${prefix}name="${key}" value="${safe(shown)}" maxlength="${key==='div'?20:key==='product'?200:20}" inputmode="${key.startsWith('price')?'decimal':'text'}" aria-label="${labels[key]}">`;}
   function cell(item,key){const original=key.startsWith('price')&&item[key]!==null&&item[key]!==undefined&&item[key]!==''?Number(item[key]).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):String(item[key]??'');return input(key,item[key]??'',`class="product-cell" data-product-cell data-product-id="${item.id}" data-product-key="${key}" data-original="${safe(original)}" `);}

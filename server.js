@@ -306,6 +306,20 @@ async function api(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/products') {
     return json(res, 200, { products: (readDb().products || []).slice().sort((a,b) => a.div.localeCompare(b.div,'es') || a.product.localeCompare(b.product,'es')) });
   }
+  if (req.method === 'POST' && url.pathname === '/api/products/orders') {
+    try {
+      const input = await body(req);
+      const result = await mutateDb(db => require('./product-orders').createOrder(db, user, input));
+      if (!result.duplicate) {
+        const db = readDb(), message = db.messages.find(item => item.id === result.order.messageId);
+        emitConversation(db, message.conversationId, 'message', publicMessage(db, message));
+        for (const recipientId of chatUserIds(db, message.conversationId).filter(id => id !== user.id)) {
+          notifyUser(recipientId, { title: user.name, body: message.text, url: `/#chat/${message.conversationId}`, badgeCount: db.messageReceipts.filter(r => r.userId === recipientId && !r.readAt).length }).catch(console.error);
+        }
+      }
+      return json(res, result.duplicate ? 200 : 201, { order: result.order });
+    } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
   if (req.method === 'POST' && url.pathname === '/api/products') {
     if (user.role !== 'admin') return json(res, 403, { error: 'Solo el administrador puede agregar productos' });
     try {
