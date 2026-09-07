@@ -1,0 +1,35 @@
+/* Progress is readable as both a percentage and a row color. */
+.task-progress-25{--task-bg:#fff3b0;--task-ink:#705000}
+.task-progress-50{--task-bg:#e5efff;--task-ink:#164cad}
+.task-progress-75{--task-bg:#e2f5e7;--task-ink:#176b36}
+.task-progress-100{--task-bg:#fff0f0;--task-ink:#bd2424}
+.excel-table tr[class*="task-progress-"]:not(.task-progress-0) td{background:var(--task-bg);color:var(--task-ink)}
+.excel-table tr[class*="task-progress-"]:not(.task-progress-0) td :is(button,strong,small,span,select,div){color:var(--task-ink)}
+.excel-table tr[class*="task-progress-"]:not(.task-progress-0) .status-pill{background:var(--task-bg);border:1px solid currentColor}
+.excel-table .task-progress-100 td,.excel-table .task-progress-100 td :is(button,strong,small,span,select,div){color:#bd2424;text-decoration:line-through}
+.compact-machine-task.done,.compact-machine-task.done span{color:#bd2424!important;text-decoration:line-through;background:#fff0f0}
+.compact-machine-task{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.task-delete-dialog{width:min(440px,calc(100% - 24px));border:1px solid #d9dee6;border-radius:14px;padding:22px;color:#293653;max-height:90dvh;overflow:auto}
+.task-delete-dialog::backdrop{background:#172036a8}
+.task-delete-dialog h2{margin:0 0 12px;font-size:1.2rem}
+.task-delete-dialog p{overflow-wrap:anywhere;line-height:1.5}
+.task-delete-dialog .danger{background:#bd2424;color:white}
+@media(max-width:760px){
+  #appView.chat-mode{padding-bottom:0}
+  #appView.chat-mode>aside{display:none}
+  #appView.chat-mode>.content{height:100dvh;display:flex;flex-direction:column;min-height:0;padding:12px 12px max(8px,env(safe-area-inset-bottom))}
+  #appView.chat-mode>.content>header{flex-shrink:0}
+  #appView.chat-mode>.content>header h1{margin:0 0 12px}
+  #appView.chat-mode #chatView{flex:1;min-height:0}
+  #appView.chat-mode .chat-shell{height:100%;min-height:0}
+}
+.journey-topbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px;border:1px solid #dce3eb;border-radius:10px;background:#fff}
+.journey-topbar label{margin:0;display:flex;align-items:center;gap:6px;font-size:.875rem}
+.journey-topbar input,.journey-topbar select{width:auto;max-width:220px;padding:8px;min-height:44px}
+.journey-topbar button{min-height:44px;padding:8px 12px;margin-left:auto}
+#visitsView .visit-filters{margin:10px 0;flex-wrap:wrap}
+#visitsView .visit-filters .primary{width:auto;white-space:nowrap}
+#visitsView .visit-status{margin:6px 0;font-size:.8125rem}
+#visitsView .journey-layers{border-top:1px solid #dce3eb;padding-top:4px}
+@media(max-width:600px){.journey-topbar label{flex:1;min-width:130px}.journey-topbar input,.journey-topbar select{width:100%;min-width:0}.journey-topbar button{margin-left:0}.visit-filters #visitSearch{flex-basis:60%}}
+#visitsView [hidden]{display:none!important}

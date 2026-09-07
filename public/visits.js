@@ -64,7 +64,7 @@
     node.classList.toggle('warning', Boolean(s.pending.length || lastError));
   }
   function mount() {
-    q('#visitsView').innerHTML = `<div class="visit-toolbar"><div class="visit-actions"><button id="visitNew" class="primary">＋ Cliente</button><button id="visitSync">Sincronizar</button></div></div><div class="journey-controls"><span id="journeyState" class="journey-state" role="status">Cargando jornada…</span><button id="journeyToggle" hidden>Iniciar jornada</button><span id="journeySignal" role="status"></span></div><p id="visitStatus" class="visit-status" role="status"></p><div class="visit-filters"><button class="visit-mode" data-mode="clients">Clientes</button><button class="visit-mode" data-mode="day">Visitas del día</button><input id="visitSearch" type="search" aria-label="Buscar cliente o zona" placeholder="Cliente o zona"><input id="visitDay" type="date" aria-label="Fecha de jornada"><select id="visitSeller" aria-label="Vendedor"></select></div><div id="journeyLayers" class="journey-layers"><label><input type="checkbox" value="clients" checked> Clientes</label><label><input type="checkbox" value="seller" checked> Vendedor</label><label><input type="checkbox" value="route" checked> Recorrido GPS</label><button id="journeyFit">Ver todo</button></div><div class="visit-workspace"><div id="visitList" class="visit-list"></div><div class="visit-map-panel"><div id="visitMap" class="visit-map" aria-label="Mapa de clientes"></div><p id="journeyLegend" class="visit-caption"></p><p id="visitCaption" class="visit-caption"></p><div id="visitDetail" class="visit-detail"></div></div></div><p class="journey-help">GPS solo durante una jornada iniciada por el vendedor. Mantén Avanza abierta; puede haber intervalos sin señal. Ubicaciones GPS conservadas durante 30 días.</p><dialog id="visitDialog" class="visit-dialog"></dialog>`;
+    q('#visitsView').innerHTML = `<div class="journey-topbar"><label id="journeySellerLabel">Vendedor<select id="visitSeller" aria-label="Vendedor"></select></label><label>Fecha<input id="visitDay" type="date" aria-label="Fecha de jornada"></label><span id="journeyState" class="journey-state" role="status">Cargando jornada…</span><button id="journeyToggle" hidden>Iniciar jornada</button></div><p id="journeySignal" role="status"></p><div class="visit-filters"><input id="visitSearch" type="search" aria-label="Buscar cliente o zona" placeholder="Buscar cliente o zona"><button id="visitNew" class="primary">＋ Cliente</button><button class="visit-mode" data-mode="clients">Todos</button><button class="visit-mode" data-mode="day">Visitados</button></div><div id="journeyLayers" class="journey-layers"><label><input type="checkbox" value="clients" checked> Clientes</label><label><input type="checkbox" value="seller" checked> Vendedor</label><label><input type="checkbox" value="route" checked> Recorrido GPS</label><button id="journeyFit">Ver todo</button></div><p id="visitStatus" class="visit-status" role="status"></p><div class="visit-workspace"><div id="visitList" class="visit-list"></div><div class="visit-map-panel"><div id="visitMap" class="visit-map" aria-label="Mapa de clientes"></div><p id="journeyLegend" class="visit-caption"></p><p id="visitCaption" class="visit-caption"></p><div id="visitDetail" class="visit-detail"></div></div></div><p class="journey-help">GPS solo durante una jornada iniciada por el vendedor. Mantén Avanza abierta; puede haber intervalos sin señal. Ubicaciones GPS conservadas durante 30 días.</p><dialog id="visitDialog" class="visit-dialog"></dialog>`;
     map = L.map('visitMap').setView([-16.5,-68.15], 12); layers = L.featureGroup().addTo(map); gpsLayers = L.featureGroup().addTo(map);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(map).on('tileerror', () => { q('#visitCaption').textContent = 'Mapa base no disponible. Puedes registrar visitas desde la lista.'; });
     map.on('click', e => {
@@ -74,7 +74,7 @@
       dialog.querySelector('[name=longitude]').value = e.latlng.lng.toFixed(6);
       q('#visitCaption').textContent = 'Ubicación seleccionada';
     });
-    q('#visitNew').onclick = () => clientDialog(); q('#visitSync').onclick = () => {void sync();void refreshJourney();};
+    q('#visitNew').onclick = () => clientDialog();
     q('#visitSearch').oninput = e => { search=e.target.value; renderRows(); };
     q('#visitDay').onchange = e => { day=e.target.value; fitNext=true;renderRows(); };
     q('#visitSeller').onchange = e => { seller=e.target.value; journey=null;fitNext=true;renderRows();void refreshJourney(); };
@@ -89,7 +89,7 @@
     const s = projected(read());
     if (!seller) seller=me.id;
     q('#visitSeller').innerHTML = s.sellers.map(u => `<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('');
-    q('#visitSeller').value=seller; q('#visitSeller').hidden=me.role!=='admin';
+    q('#visitSeller').value=seller; q('#visitSeller').hidden=me.role!=='admin'; q('#journeySellerLabel').hidden=me.role!=='admin';
     q('#visitDay').value=day; q('#visitDay').hidden=false;
     document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed',String(b.dataset.mode===mode)));
     status(); renderRows(); journeyStatus(); setTimeout(() => map.invalidateSize(),0);

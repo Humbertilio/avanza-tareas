@@ -1,4 +1,5 @@
 'use strict';
+const {migrateClients}=require('./client-directory');
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
 const text = (v, n = 200) => String(v || '').trim().slice(0, n);
 function point(p, required = false) {
@@ -11,25 +12,24 @@ function timestamp(v) {
   return new Date(v).toISOString();
 }
 function clients(db) {
-  const locations = db.customerLocations || {};
-  return [...(db.companies || []).map(c => ({ id: c.id, name: c.name, address: c.address || '', city: c.city || '', phone: c.phone || '', contact: '', point: locations[c.id]?.point || null, source: 'company' })), ...(db.fieldClients || [])];
+  migrateClients(db);
+  return db.companies.map(c => ({ id:c.id,name:c.name,address:c.address||'',city:c.city||'',phone:c.phone||'',contact:c.contact||'',point:c.point||null,createdBy:c.createdBy,createdAt:c.createdAt,source:'company' }));
 }
 function applyOperation(db, user, op) {
-  db.fieldClients ||= []; db.fieldVisits ||= []; db.customerLocations ||= {}; db.fieldOperations ||= [];
+  migrateClients(db); db.fieldVisits ||= []; db.fieldOperations ||= [];
   if (!op || !/^[a-zA-Z0-9-]{16,100}$/.test(op.id || '')) fail('Identificador inválido');
   if (db.fieldOperations.some(o => o.id === op.id && o.userId === user.id)) return;
   const input = op.data || {}, now = new Date().toISOString();
   if (op.type === 'client') {
     if (!/^[a-zA-Z0-9-]{16,100}$/.test(input.id || '') || !text(input.name)) fail('Nombre de cliente obligatorio');
     if (clients(db).some(c => c.id === input.id)) fail('Ya existe ese identificador', 409);
-    db.fieldClients.push({ id: input.id, name: text(input.name), address: text(input.address, 400), city: text(input.city), contact: text(input.contact), phone: text(input.phone, 60), point: point(input.point, true), createdBy: user.id, createdAt: timestamp(input.createdAt), syncedAt: now, source: 'field' });
+    db.companies.push({ id: input.id, name: text(input.name), address: text(input.address, 400), city: text(input.city), contact: text(input.contact), phone: text(input.phone, 60), point: point(input.point, true), createdBy: user.id, createdAt: timestamp(input.createdAt), syncedAt: now, status:'registered',taxId:'' });
   } else if (op.type === 'location') {
     const client = clients(db).find(c => c.id === input.clientId);
     if (!client) fail('Cliente no encontrado', 404);
     if (client.point && user.role !== 'admin') fail('Solo un administrador puede corregir una ubicación existente', 403);
     const location = point(input.point, true);
-    if (client.source === 'company') db.customerLocations[client.id] = { point: location, updatedBy: user.id, updatedAt: now };
-    else Object.assign(db.fieldClients.find(c => c.id === client.id), { point: location, updatedBy: user.id, updatedAt: now });
+    Object.assign(db.companies.find(c => c.id === client.id), { point: location, locationUpdatedBy: user.id, locationUpdatedAt: now });
   } else if (op.type === 'arrival') {
     if (!clients(db).some(c => c.id === input.clientId)) fail('Cliente no encontrado', 404);
     if (!/^[a-zA-Z0-9-]{16,100}$/.test(input.id || '') || db.fieldVisits.some(v => v.id === input.id)) fail('Identificador de visita inválido o duplicado', 409);

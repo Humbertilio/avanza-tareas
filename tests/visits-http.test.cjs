@@ -7,7 +7,7 @@ test('authenticated HTTP flow and offline shell assets',async()=>{
   fs.mkdirSync(path.resolve('tmp'), {recursive:true});
   const data=fs.mkdtempSync(path.resolve('tmp/visits-http-'));
   process.env.AVANZA_DATA_DIR=data;process.env.PORT='0';process.env.HOST='127.0.0.1';process.env.ADMIN_PASSWORD='VisitTest123!';
-  const {server}=require('../server');
+  const {server,readDb}=require('../server');
   if(!server.listening)await new Promise(r=>server.once('listening',r));
   const base=`http://127.0.0.1:${server.address().port}`;
   try{
@@ -18,6 +18,25 @@ test('authenticated HTTP flow and offline shell assets',async()=>{
     const id=randomUUID(),at=new Date().toISOString();const operation={id:randomUUID(),type:'client',data:{id,name:'Cliente HTTP',point:{latitude:-16,longitude:-68},createdAt:at}};
     assert.equal((await send(operation)).status,200);assert.equal((await send(operation)).status,200);
     response=await fetch(base+'/api/field/data',{headers:{Cookie:cookie}});const payload=await response.json();assert.equal(payload.clients.length,1);
+    const call=async(path,method='GET',body,session=cookie)=>{const r=await fetch(base+path,{method,headers:{Cookie:session,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const d=await r.json();assert.ok(r.ok,JSON.stringify(d));return d;};
+    const companyData=await call('/api/companies');assert.equal(companyData.companies[0].id,id);
+    await call('/api/companies/'+id,'PATCH',{name:'Nombre compartido',phone:'555123',address:'Calle Central',city:'Santiago',memberIds:[]});
+    const shared=await call('/api/field/data');assert.equal(shared.clients[0].name,'Nombre compartido');assert.equal(shared.clients[0].phone,'555123');
+    const employee=(await call('/api/users','POST',{name:'Empleado de prueba',username:'empleado.prueba',password:'1234',role:'employee'})).user;
+    const second=(await call('/api/users','POST',{name:'Segundo de prueba',username:'segundo.prueba',password:'1234',role:'employee'})).user;
+    const employeeLogin=await fetch(base+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'empleado.prueba',password:'1234'})});const employeeCookie=employeeLogin.headers.get('set-cookie').split(';')[0];
+    const adminId=readDb().users.find(u=>u.username==='admin').id;
+    const before=readDb().messages.length;
+    const task=(await call('/api/tasks','POST',{title:'Verificar sin chat',description:'Prueba',assigneeId:employee.id,dueDate:'2026-12-30'})).task;
+    await call('/api/tasks/'+task.id,'PATCH',{title:task.title,assigneeId:second.id,dueDate:task.dueDate});
+    await call('/api/tasks/'+task.id,'PATCH',{title:task.title,assigneeId:employee.id,dueDate:task.dueDate});
+    await call('/api/tasks/'+task.id+'/status','PATCH',{progress:100},employeeCookie);
+    const machine=(await call('/api/machines','POST',{name:'Equipo de prueba',responsibleId:employee.id})).machine;
+    const machineTask=(await call('/api/machine-tasks','POST',{machineId:machine.id,title:'Revisar equipo',dueDate:'2026-12-30'})).task;
+    await call('/api/machine-tasks/'+machineTask.id+'/status','PATCH',{progress:100},employeeCookie);
+    assert.equal(readDb().messages.length,before,'Task actions must not create chat messages');
+    await call('/api/companies/'+id,'PATCH',{name:'Nombre compartido',phone:'555123',address:'Calle Central',city:'Santiago',memberIds:[adminId,employee.id]});
+    const linked=(await call('/api/companies')).companies.find(c=>c.id===id);assert.ok(linked.conversationId);assert.equal(readDb().conversations.find(c=>c.id===linked.conversationId).companyId,id);
     const shell=await (await fetch(base+'/service-worker.js')).text();const assets=JSON.parse('['+shell.match(/ASSETS=\[(.*?)\]/)[1].replaceAll("'",'"')+']');
     for(const asset of assets)assert.equal((await fetch(base+asset)).status,200,asset);
   }finally{await new Promise(r=>server.close(r));}

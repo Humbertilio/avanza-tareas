@@ -18,5 +18,5 @@ test('offline client, arrival and finish persist, survive reload, and sync after
   await app.enqueue('arrival',{id:visitId,clientId:id,arrivedAt:at,point:null});await new Promise(setImmediate);
   await app.enqueue('finish',{id:visitId,endedAt:'2026-01-01T12:10:00.000Z',result:'Sin pedido'});await new Promise(setImmediate);
   assert.equal(app.read().pending.length,3);assert.equal(app.projected(app.read()).visits[0].result,'Sin pedido');
-  app=load();assert.equal(app.read().pending.length,3);online=true;await app.sync();assert.equal(app.read().pending.length,3);await app.sync();assert.equal(app.read().pending.length,0);assert.equal(db.fieldClients.length,1);assert.equal(db.fieldVisits.length,1);assert.equal(db.fieldVisits[0].arrivedAt,at);assert.equal(app.read().visits[0].result,'Sin pedido');
+  app=load();assert.equal(app.read().pending.length,3);online=true;await app.sync();assert.equal(app.read().pending.length,3);await app.sync();assert.equal(app.read().pending.length,0);assert.equal(db.companies.length,1);assert.equal(db.fieldVisits.length,1);assert.equal(db.fieldVisits[0].arrivedAt,at);assert.equal(app.read().visits[0].result,'Sin pedido');
 });
