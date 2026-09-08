@@ -211,6 +211,10 @@ function emitChat(userId, event, payload) {
   for (const res of chatStreams.get(userId) || []) res.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
 }
 function emitConversation(db, conversationId, event, payload) { chatUserIds(db, conversationId).forEach(userId => emitChat(userId, event, payload)); }
+function clientChatContacts(db, user) {
+  const groups = db.conversations.filter(c => c.type === 'group' && c.companyId === user.companyId && c.settings?.clientGroup && chatParticipant(db,c.id,user.id));
+  return db.users.filter(person => person.active && person.id !== user.id && (person.role === 'admin' || (person.role === 'seller' && groups.some(c => chatParticipant(db,c.id,person.id)))));
+}
 function publicAttachment(item) { return { id: item.id, name: item.name, mimeType: item.mimeType, size: item.size, url: `/api/chat/attachments/${item.id}` }; }
 function publicMessage(db, message) {
   const order = message.orderId && (db.productOrders || []).find(o => o.id === message.orderId && o.conversationId === message.conversationId && o.messageId === message.id);
@@ -589,12 +593,12 @@ async function api(req, res, url) {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/chat/members') {
-    const members=user.role==='client'?[]:readDb().users.filter(item=>item.active&&item.id!==user.id&&item.role!=='client').map(publicUser).sort((a,b)=>a.name.localeCompare(b.name,'es',{sensitivity:'base'}));
+    const db=readDb(),members=(user.role==='client'?clientChatContacts(db,user):db.users.filter(item=>item.active&&item.id!==user.id&&item.role!=='client')).map(publicUser).sort((a,b)=>a.name.localeCompare(b.name,'es',{sensitivity:'base'}));
     return json(res, 200, { members });
   }
 
   if (req.method === 'GET' && url.pathname === '/api/chat/conversations') {
-    const db = readDb(), memberships = user.role === 'admin' ? db.conversations.map(conversation => ({ conversationId: conversation.id, observer: !chatParticipant(db,conversation.id,user.id) })) : (db.conversationParticipants || []).filter(item => item.userId === user.id && (user.role!=='client'||db.conversations.some(conversation=>conversation.id===item.conversationId&&conversation.companyId===user.companyId)));
+    const db = readDb(), memberships = user.role === 'admin' ? db.conversations.map(conversation => ({ conversationId: conversation.id, observer: !chatParticipant(db,conversation.id,user.id) })) : (db.conversationParticipants || []).filter(item => item.userId === user.id && (user.role!=='client'||db.conversations.some(conversation=>conversation.id===item.conversationId&&(conversation.type==='direct'||conversation.companyId===user.companyId))));
     const conversations = memberships.map(membership => {
       const conversation = db.conversations.find(item => item.id === membership.conversationId);
       if (!conversation) return null;
@@ -607,11 +611,11 @@ async function api(req, res, url) {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/chat/conversations') {
-    if(user.role==='client')return json(res,403,{error:'Los clientes utilizan el grupo de su empresa'});
     const input = await body(req), otherId = clean(input.userId, 100);
     if (!otherId || otherId === user.id) return json(res, 400, { error: 'Seleccione otro usuario' });
     try {
       const conversation = await mutateDb(db => {
+        if (user.role === 'client' && !clientChatContacts(db,user).some(person => person.id === otherId)) throw Object.assign(new Error('Seleccione un vendedor asignado o un administrador activo'), { status: 403 });
         if (!db.users.some(item => item.id === otherId && item.active && item.role!=='client')) throw Object.assign(new Error('Los contactos cliente solo participan en el grupo de su empresa'), { status: 400 });
         const existing = db.conversations.find(item => item.type === 'direct' && chatUserIds(db,item.id).length === 2 && chatUserIds(db,item.id).includes(user.id) && chatUserIds(db,item.id).includes(otherId));
         if (existing) return existing;

@@ -15,7 +15,7 @@ test('client sends inline order through HTTP; unrelated client cannot read',asyn
     db.conversations.push({id:'group',type:'group',companyId:'company',settings:{clientGroup:true},createdAt:new Date().toISOString()});
     db.conversationParticipants.push({id:'p',conversationId:'group',userId:'buyer'});
     db.products=[{id:'product',div:'1',product:'Artículo',price3:15}];
-    for(const id of ['enlace','enlace2']){db.users.push({...db.users[0],id,username:id,role:'employee'});db.conversationParticipants.push({id,conversationId:'group',userId:id});}
+    for(const id of ['enlace','enlace2']){db.users.push({...db.users[0],id,username:id,role:id==='enlace2'?'seller':'employee'});db.conversationParticipants.push({id,conversationId:'group',userId:id});}
     fs.writeFileSync(file,JSON.stringify(db));
     async function login(username){const r=await fetch(base+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password:'OrderTest123!'})});assert.equal(r.status,200);return r.headers.get('set-cookie').split(';')[0];}
     const cookie=await login('buyer');
@@ -38,6 +38,19 @@ test('client sends inline order through HTTP; unrelated client cannot read',asyn
     const approved=await patch(cookie,{action:'approve',actionId:'approve-http-123456',revision:2});assert.equal(approved.status,200);assert.equal(approved.order.status,'approved');assert.equal(approved.order.items[0].amount,60);
     assert.equal((await patch(winner,{...payload,actionId:'after-http-12345678',revision:3})).status,409);
     const final=JSON.parse(fs.readFileSync(file,'utf8'));assert.equal(final.productOrders[0].history.length,3);assert.equal(final.messages.length,3);
+    r=await fetch(base+'/api/chat/members',{headers:{Cookie:cookie}});assert.equal(r.status,200);
+    const contacts=(await r.json()).members;assert.ok(contacts.some(m=>m.id==='enlace2'));assert.ok(contacts.some(m=>m.role==='admin'));assert.ok(!contacts.some(m=>m.id==='enlace'||m.id==='outsider'));
+    const direct=async userId=>fetch(base+'/api/chat/conversations',{method:'POST',headers:{Cookie:cookie,'Content-Type':'application/json'},body:JSON.stringify({userId})});
+    assert.equal((await direct('enlace')).status,403);assert.equal((await direct('outsider')).status,403);
+    r=await direct('enlace2');assert.equal(r.status,201);const conversation=(await r.json()).conversation;
+    r=await direct('enlace2');assert.equal((await r.json()).conversation.id,conversation.id);
+    r=await direct(contacts.find(m=>m.role==='admin').id);assert.equal(r.status,201);
+    r=await fetch(base+'/api/chat/conversations',{headers:{Cookie:cookie}});assert.ok((await r.json()).conversations.some(c=>c.id===conversation.id));
+    const messageUrl=base+'/api/chat/conversations/'+conversation.id+'/messages';
+    for(const who of [cookie,links[1]]){r=await fetch(messageUrl,{method:'POST',headers:{Cookie:who,'Content-Type':'application/json'},body:JSON.stringify({text:'Mensaje privado de prueba'})});assert.equal(r.status,201);}
+    r=await fetch(messageUrl,{headers:{Cookie:cookie}});assert.equal((await r.json()).messages.length,2);
+    r=await fetch(messageUrl,{headers:{Cookie:await login('outsider')}});assert.equal(r.status,403);
+
     for(const asset of ['/chat-orders.js','/chat-orders.css','/service-worker.js'])assert.equal((await fetch(base+asset)).status,200);
   }finally{await new Promise(r=>server.close(r));}
 });
