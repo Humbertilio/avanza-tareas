@@ -28,12 +28,11 @@ function createOrder(db, user, input) {
   });
   const now = new Date().toISOString(), id = crypto.randomUUID();
   const order = { id, number: `PED-${now.slice(0,10).replaceAll('-','')}-${id.slice(0,8).toUpperCase()}`, requestId: input.requestId, clientId: client.id, clientName: client.name, clientPhone: client.phone || '', companyId: client.companyId, conversationId: group.id, items, createdAt: now };
-  const workbook = buildWorkbook(order);
-  if (workbook.length > 5000000) fail('El pedido supera el tamaño permitido', 413);
-  const message = { id: crypto.randomUUID(), conversationId: group.id, senderId: client.id, type: 'mixed', text: `Pedido ${order.number} · ${client.name}\nExcel editable adjunto con ${items.length} productos.`, replyToMessageId: null, forwardedFromMessageId: null, deletedAt: null, createdAt: now, updatedAt: now };
+  Object.assign(order, { status: 'sent', revision: 1, note: '', updatedAt: now, history: [] });
+  snapshot(order, user, 'sent');
+  const message = { id: crypto.randomUUID(), orderId: id, conversationId: group.id, senderId: client.id, type: 'text', text: `Pedido ${order.number} · ${client.name}`, replyToMessageId: null, forwardedFromMessageId: null, deletedAt: null, createdAt: now, updatedAt: now };
   order.messageId = message.id;
   db.messages.push(message);
-  db.attachments.push({ id: crypto.randomUUID(), messageId: message.id, conversationId: group.id, name: `${order.number}.xlsx`, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', size: workbook.length, data: workbook.toString('base64'), createdAt: now });
   db.conversationParticipants.filter(p => p.conversationId === group.id).forEach(p => db.messageReceipts.push({ id: crypto.randomUUID(), messageId: message.id, userId: p.userId, deliveredAt: p.userId === client.id ? now : null, readAt: p.userId === client.id ? now : null }));
   group.updatedAt = now;
   db.productOrders.push(order);
@@ -55,4 +54,76 @@ function buildWorkbook(order) {
   book.Workbook = { CalcPr: { fullCalcOnLoad: true } };
   return XLSX.write(book, { type: 'buffer', bookType: 'xlsx' });
 }
-module.exports = { createOrder, buildWorkbook };
+function snapshot(order, user, action) {
+  order.history.push({ revision: order.revision, status: order.status, action, userId: user.id, userName: user.name, at: order.updatedAt, note: order.note, items: order.items.map(item => ({ ...item })) });
+}
+function getOrder(db, user, id) {
+  const order = (db.productOrders || []).find(item => item.id === id);
+  if (!order) fail('Pedido no encontrado', 404);
+  if (!db.conversationParticipants.some(p => p.conversationId === order.conversationId && p.userId === user.id) && user.role !== 'admin') fail('No pertenece al chat de este pedido', 403);
+  return order;
+}
+function publicOrder(order) {
+  const { history, operations, ...visible } = order;
+  return visible;
+}
+function updateOrder(db, user, id, input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) fail('Acción no válida');
+  const order = getOrder(db, user, id);
+  if (!db.conversationParticipants.some(p => p.conversationId === order.conversationId && p.userId === user.id)) fail('La supervisión es de solo lectura', 403);
+  const customer = user.role === 'client' && user.id === order.clientId;
+  const internal = ['admin', 'employee', 'seller'].includes(user.role);
+  const action = input.action;
+  if (!(customer && ['approve', 'requestChanges'].includes(action)) && !(internal && ['saveQuote', 'sendQuote'].includes(action))) fail('No puede realizar esta acción', 403);
+  if (typeof input.actionId !== 'string' || !/^[\w-]{16,100}$/.test(input.actionId)) fail('Identificador de acción no válido');
+  if ((order.operations || []).some(op => op.id === input.actionId && op.userId === user.id)) return { order, duplicate: true };
+  if (!order.revision) fail('Este pedido antiguo se gestiona con su archivo adjunto', 409);
+  if (input.revision !== order.revision) fail('Hay una versión más reciente. Actualice el pedido antes de continuar.', 409);
+  if (order.status === 'approved') fail('El pedido aprobado no se puede modificar', 409);
+  if (customer && order.status !== 'quoted') fail('El pedido todavía no está pendiente de aprobación', 409);
+  if (internal && order.status === 'quoted') fail('Espere la respuesta del cliente antes de cambiar su cotización', 409);
+  if (input.note != null && (typeof input.note !== 'string' || input.note.length > 2000)) fail('Las observaciones admiten hasta 2000 caracteres');
+  let items = order.items.map(item => ({ ...item }));
+  if (action !== 'approve') {
+    if (!Array.isArray(input.items) || input.items.length !== items.length) fail('Revise los productos del pedido');
+    items = items.map((item, index) => {
+      const line = input.items[index];
+      if (!line || line.productId !== item.productId) fail('No puede sustituir los productos del pedido');
+      if (customer) {
+        const q = line.quantity;
+        if (typeof q !== 'number' || !Number.isFinite(q) || q <= 0 || q > 1000000 || Math.abs(q * 1000 - Math.round(q * 1000)) > 0.000001) fail('Cantidad inválida: use hasta tres decimales');
+        if (line.price3 !== item.price3) fail('El cliente no puede cambiar precios', 403);
+        item.quantity = q;
+      } else {
+        if (line.quantity !== item.quantity) fail('Las cantidades las modifica el cliente');
+        const p = line.price3;
+        if (p !== null && (typeof p !== 'number' || !Number.isFinite(p) || p < 0 || p > 1000000000 || Math.abs(p * 100 - Math.round(p * 100)) > 0.00001)) fail('Precio inválido: use hasta dos decimales');
+        item.price3 = p;
+      }
+      item.amount = item.price3 == null ? null : Math.round(item.quantity * item.price3 * 100) / 100;
+      return item;
+    });
+  }
+  if (['sendQuote', 'approve'].includes(action) && items.some(item => item.price3 == null)) fail('Complete todos los precios antes de enviar la cotización');
+  if (action === 'requestChanges' && !String(input.note || '').trim() && items.every((item, i) => item.quantity === order.items[i].quantity)) fail('Cambie una cantidad o indique los cambios que necesita');
+  order.items = items;
+  if (action !== 'approve') order.note = String(input.note || '').trim();
+  order.status = { saveQuote: 'quoting', sendQuote: 'quoted', approve: 'approved', requestChanges: 'changes_requested' }[action];
+  order.revision++;
+  order.updatedAt = new Date().toISOString();
+  if (action === 'approve') { order.approvedAt = order.updatedAt; order.approvedBy = user.id; }
+  snapshot(order, user, action);
+  (order.operations ||= []).push({ id: input.actionId, userId: user.id });
+  const original = db.messages.find(m => m.id === order.messageId);
+  if (original) original.updatedAt = order.updatedAt;
+  let message;
+  if (action !== 'saveQuote') {
+    const label = { sendQuote: 'Cotización lista para aprobar', approve: 'Pedido aprobado por el cliente', requestChanges: 'El cliente solicita cambios' }[action];
+    message = { id: crypto.randomUUID(), orderRefId: order.id, conversationId: order.conversationId, senderId: user.id, type: 'text', text: `${order.number}: ${label} · versión ${order.revision}`, createdAt: order.updatedAt, updatedAt: order.updatedAt };
+    db.messages.push(message);
+    db.conversationParticipants.filter(p => p.conversationId === order.conversationId).forEach(p => db.messageReceipts.push({ id: crypto.randomUUID(), messageId: message.id, userId: p.userId, deliveredAt: p.userId === user.id ? order.updatedAt : null, readAt: p.userId === user.id ? order.updatedAt : null }));
+  }
+  db.conversations.find(c => c.id === order.conversationId).updatedAt = order.updatedAt;
+  return { order, message, duplicate: false };
+}
+module.exports = { createOrder, buildWorkbook, updateOrder, getOrder, publicOrder };

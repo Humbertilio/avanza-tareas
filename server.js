@@ -213,6 +213,8 @@ function emitChat(userId, event, payload) {
 function emitConversation(db, conversationId, event, payload) { chatUserIds(db, conversationId).forEach(userId => emitChat(userId, event, payload)); }
 function publicAttachment(item) { return { id: item.id, name: item.name, mimeType: item.mimeType, size: item.size, url: `/api/chat/attachments/${item.id}` }; }
 function publicMessage(db, message) {
+  const order = message.orderId && (db.productOrders || []).find(o => o.id === message.orderId && o.conversationId === message.conversationId && o.messageId === message.id);
+  message = { ...message, order: order ? require('./product-orders').publicOrder(order) : undefined };
   const receipts = (db.messageReceipts || []).filter(item => item.messageId === message.id);
   const original = message.forwardedFromMessageId ? db.messages.find(item => item.id === message.forwardedFromMessageId) : null;
   return { ...message, senderName: db.users.find(item => item.id === message.senderId)?.name || 'Usuario eliminado', forwardedFromSenderName: original ? db.users.find(item => item.id === original.senderId)?.name || 'Usuario eliminado' : null, attachments: (db.attachments || []).filter(item => item.messageId === message.id).map(publicAttachment), delivered: receipts.filter(item => item.userId !== message.senderId).every(item => item.deliveredAt), read: receipts.filter(item => item.userId !== message.senderId).every(item => item.readAt) };
@@ -300,6 +302,24 @@ async function api(req, res, url) {
         }
       }
       return json(res, result.duplicate ? 200 : 201, { order: result.order });
+    } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+  }
+  const orderMatch = url.pathname.match(/^\/api\/products\/orders\/([^/]+)$/);
+  if (orderMatch && ['GET', 'PATCH'].includes(req.method)) {
+    try {
+      const orders = require('./product-orders');
+      if (req.method === 'GET') return json(res, 200, { order: orders.getOrder(readDb(), user, orderMatch[1]) });
+      const input = await body(req);
+      const result = await mutateDb(db => orders.updateOrder(db, user, orderMatch[1], input));
+      if (!result.duplicate) {
+        const db = readDb();
+        emitConversation(db, result.order.conversationId, 'message-change', { conversationId: result.order.conversationId, messageId: result.order.messageId });
+        if (result.message) {
+          emitConversation(db, result.order.conversationId, 'message', publicMessage(db, result.message));
+          for (const recipientId of chatUserIds(db, result.order.conversationId).filter(id => id !== user.id)) notifyUser(recipientId, { title: user.name, body: result.message.text, url: `/#chat/${result.order.conversationId}` }).catch(console.error);
+        }
+      }
+      return json(res, 200, { order: orders.publicOrder(result.order) });
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
   }
   if (req.method === 'POST' && url.pathname === '/api/products') {
@@ -642,7 +662,7 @@ async function api(req, res, url) {
   if(req.method==='DELETE'&&chatMessageMatch){
     try{
       const input=await body(req),scope=input.scope==='everyone'?'everyone':'me';
-      const result=await mutateDb(db=>{const message=db.messages.find(item=>item.id===chatMessageMatch[1]&&!item.deletedAt);if(!message||!chatParticipant(db,message.conversationId,user.id))throw Object.assign(new Error('Mensaje no encontrado'),{status:404});if(scope==='everyone'){if(message.senderId!==user.id)throw Object.assign(new Error('Solo puede borrar para todos sus propios mensajes'),{status:403});message.deletedAt=new Date().toISOString();message.updatedAt=message.deletedAt;db.attachments=(db.attachments||[]).filter(item=>item.messageId!==message.id);db.messageReceipts=(db.messageReceipts||[]).filter(item=>item.messageId!==message.id);}else{message.deletedForUserIds||=[];if(!message.deletedForUserIds.includes(user.id))message.deletedForUserIds.push(user.id);db.messageReceipts=(db.messageReceipts||[]).filter(item=>!(item.messageId===message.id&&item.userId===user.id));}const conversation=db.conversations.find(item=>item.id===message.conversationId);if(conversation)conversation.updatedAt=new Date().toISOString();return{conversationId:message.conversationId,messageId:message.id,scope,userId:user.id};});
+      const result=await mutateDb(db=>{const message=db.messages.find(item=>item.id===chatMessageMatch[1]&&!item.deletedAt);if(!message||!chatParticipant(db,message.conversationId,user.id))throw Object.assign(new Error('Mensaje no encontrado'),{status:404});if(message.orderId)throw Object.assign(new Error('Los pedidos se conservan en el chat para mantener su historial'),{status:409});if(scope==='everyone'){if(message.senderId!==user.id)throw Object.assign(new Error('Solo puede borrar para todos sus propios mensajes'),{status:403});message.deletedAt=new Date().toISOString();message.updatedAt=message.deletedAt;db.attachments=(db.attachments||[]).filter(item=>item.messageId!==message.id);db.messageReceipts=(db.messageReceipts||[]).filter(item=>item.messageId!==message.id);}else{message.deletedForUserIds||=[];if(!message.deletedForUserIds.includes(user.id))message.deletedForUserIds.push(user.id);db.messageReceipts=(db.messageReceipts||[]).filter(item=>!(item.messageId===message.id&&item.userId===user.id));}const conversation=db.conversations.find(item=>item.id===message.conversationId);if(conversation)conversation.updatedAt=new Date().toISOString();return{conversationId:message.conversationId,messageId:message.id,scope,userId:user.id};});
       const db=readDb();emitConversation(db,result.conversationId,'message-change',result);return json(res,200,{ok:true,scope});
     }catch(error){return json(res,error.status||500,{error:error.message});}
   }

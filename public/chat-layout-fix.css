@@ -15,3 +15,4 @@
   #appView.chat-mode .chat-room{height:100%;min-height:0;overflow:hidden}
 }
 @media(max-width:760px){.chat-shell{height:calc(100dvh - 125px);min-height:320px}.chat-room{min-height:0}.chat-view{overflow:hidden}}
+@media(max-width:760px){#appView.chat-mode .chat-view{margin-left:-12px;margin-right:-12px}}

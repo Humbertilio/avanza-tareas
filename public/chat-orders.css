@@ -1,0 +1,23 @@
+.message-row:has(.chat-order) .message-bubble{width:min(720px,100%);max-width:100%;min-width:0}
+.chat-order{font-size:13px;line-height:1.35;min-width:0;text-align:left}
+.chat-order header{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.chat-order .order-state{font-size:11px;border-radius:12px;padding:3px 8px;background:#e3edff;color:#25466f}
+.chat-order .order-state.approved{background:#d9f5df;color:#17622d}
+.chat-order-sheet{overflow:auto;max-height:45vh;margin:8px 0;background:#fff;color:#223044;border:1px solid #dce2eb;border-radius:6px}
+.chat-order table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:12px}
+.chat-order th,.chat-order td{padding:6px 4px;border-bottom:1px solid #e3e8ee;text-align:right;overflow-wrap:anywhere}
+.chat-order th:first-child,.chat-order td:first-child{text-align:left}
+.chat-order th{position:sticky;top:0;background:#edf2f7;font-weight:600;z-index:1}
+.chat-order input{width:100%;min-width:0;box-sizing:border-box;padding:5px 2px;border:1px solid #b7c6da;border-radius:4px;text-align:right;font-size:13px;background:white;color:#16283e}
+.chat-order input::-webkit-inner-spin-button{appearance:none}
+.chat-order-total{display:block;text-align:right;margin:7px 0}
+.chat-order .chat-order-note{white-space:pre-wrap;margin:6px 0}
+.chat-order-note-label{display:block;font-size:12px;margin:8px 0}
+.chat-order textarea{display:block;width:100%;box-sizing:border-box;resize:vertical;padding:6px;border:1px solid #b7c6da;border-radius:5px;font:inherit;background:white;color:#16283e}
+.chat-order-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chat-order-actions button{padding:7px 10px;font-size:12px;min-height:34px;border:1px solid #bdcadb;border-radius:6px;background:#fff;color:#213f68;cursor:pointer}
+.chat-order-actions button[data-action=approve],.chat-order-actions button[data-action=sendQuote]{background:#235ec0;color:#fff;border-color:#235ec0}
+.chat-order-actions button:disabled{opacity:.5;cursor:default}
+.chat-order .chat-order-error{color:#b42318;white-space:pre-wrap}
+.chat-order-history details{margin-top:8px}.chat-order-history summary{cursor:pointer;padding:5px 0}
+@media(max-width:600px){.message-row:has(.chat-order){padding-left:0;padding-right:0}.message-row:has(.chat-order) .message-bubble{padding:8px}.chat-order table{font-size:11px}.chat-order input{font-size:16px}.chat-order th,.chat-order td{padding:5px 2px}}

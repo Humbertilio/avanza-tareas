@@ -29,7 +29,7 @@
       try{
         const result=await request('/api/products/orders',{method:'POST',body:JSON.stringify({requestId:draft.requestId,items:selected().map(p=>({productId:p.id,quantity:Number(draft.quantities[p.id]),price3:p.price3}))})});
         draft.quantities={};draft.requestId=null;draft.review=false;draft.sending=false;renderOrder();
-        const confirmation=document.createElement('p');confirmation.className='order-success';confirmation.setAttribute('role','status');confirmation.textContent=`Pedido ${result.order.number} enviado al grupo de su empresa con el Excel editable. `;
+        const confirmation=document.createElement('p');confirmation.className='order-success';confirmation.setAttribute('role','status');confirmation.textContent=`Pedido ${result.order.number} enviado al grupo de su empresa para cotización y aprobación en el chat. `;
         const link=document.createElement('a');link.href=`/#chat/${encodeURIComponent(result.order.conversationId)}`;link.textContent='Ver pedido en el chat';confirmation.appendChild(link);root().prepend(confirmation);
       }catch(error){draft.sending=false;renderOrder();root().querySelector('#orderError').textContent=error.message;}
     });
