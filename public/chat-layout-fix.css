@@ -16,3 +16,5 @@
 }
 @media(max-width:760px){.chat-shell{height:calc(100dvh - 125px);min-height:320px}.chat-room{min-height:0}.chat-view{overflow:hidden}}
 @media(max-width:760px){#appView.chat-mode .chat-view{margin-left:-12px;margin-right:-12px}}
+
+#chatHome{border:1px solid #cbd5e1;border-radius:6px;background:white;color:#243650;padding:5px 10px;margin-bottom:5px;font:inherit;font-size:14px;cursor:pointer}
