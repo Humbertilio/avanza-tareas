@@ -863,7 +863,7 @@ async function api(req, res, url) {
       return json(res, 200, { task });
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
   }
-  if(req.method==='DELETE'&&machineTaskMatch){if(user.role!=='admin')return json(res,403,{error:'Solo el administrador puede eliminar tareas de maquinaria'});try{await mutateDb(db=>{const index=(db.machineTasks||[]).findIndex(item=>item.id===machineTaskMatch[1]);if(index<0)throw Object.assign(new Error('Tarea no encontrada'),{status:404});db.machineTasks.splice(index,1);});return json(res,200,{ok:true});}catch(error){return json(res,error.status||500,{error:error.message});}}
+  if(req.method==='DELETE'&&machineTaskMatch){try{await mutateDb(db=>{const index=(db.machineTasks||[]).findIndex(item=>item.id===machineTaskMatch[1]);if(index<0)throw Object.assign(new Error('Tarea no encontrada'),{status:404});if(user.role!=='admin'&&db.machineTasks[index].assigneeId!==user.id)throw Object.assign(new Error('Solo el responsable asignado o el administrador puede eliminar esta tarea'),{status:403});db.machineTasks.splice(index,1);});return json(res,200,{ok:true});}catch(error){return json(res,error.status||500,{error:error.message});}}
 
   const machineTaskAction = url.pathname.match(/^\/api\/machine-tasks\/([^/]+)\/(acknowledge|status|notes)$/);
   if (machineTaskAction && req.method === 'POST' && machineTaskAction[2] === 'acknowledge') {

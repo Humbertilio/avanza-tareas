@@ -35,6 +35,11 @@ test('authenticated HTTP flow and offline shell assets',async()=>{
     const machineTask=(await call('/api/machine-tasks','POST',{machineId:machine.id,title:'Revisar equipo',dueDate:'2026-12-30'})).task;
     await call('/api/machine-tasks/'+machineTask.id+'/status','PATCH',{progress:100},employeeCookie);
     assert.equal(readDb().messages.length,before,'Task actions must not create chat messages');
+    const strangerDeletion=await fetch(base+'/api/machine-tasks/'+machineTask.id,{method:'DELETE',headers:{Cookie:cookie.replace(/=.*/,'=invalid')}});assert.equal(strangerDeletion.status,401);
+    const secondLogin=await fetch(base+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'segundo.prueba',password:'1234'})});const secondCookie=secondLogin.headers.get('set-cookie').split(';')[0];
+    const forbidden=await fetch(base+'/api/machine-tasks/'+machineTask.id,{method:'DELETE',headers:{Cookie:secondCookie}});assert.equal(forbidden.status,403);
+    assert.ok(readDb().machineTasks.some(t=>t.id===machineTask.id));
+    await call('/api/machine-tasks/'+machineTask.id,'DELETE',undefined,employeeCookie);assert.ok(!readDb().machineTasks.some(t=>t.id===machineTask.id));
     await call('/api/companies/'+id,'PATCH',{name:'Nombre compartido',phone:'555123',address:'Calle Central',city:'Santiago',memberIds:[adminId,employee.id]});
     const linked=(await call('/api/companies')).companies.find(c=>c.id===id);assert.ok(linked.conversationId);assert.equal(readDb().conversations.find(c=>c.id===linked.conversationId).companyId,id);
     const shell=await (await fetch(base+'/service-worker.js')).text();const assets=JSON.parse('['+shell.match(/ASSETS=\[(.*?)\]/)[1].replaceAll("'",'"')+']');
