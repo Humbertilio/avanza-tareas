@@ -2,6 +2,20 @@ const XLSX = require('xlsx');
 const crypto = require('node:crypto');
 const normalize = value => String(value ?? '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 const fields = ['material','calibre','ancho','peso','gramaje','ubicacion','id','observacion','destino'];
+const textLimits = {material:4,ubicacion:6,id:7,observacion:40,destino:40};
+function fitValue(field, value) {
+  if (field in textLimits) return String(value ?? '').trim().slice(0,textLimits[field]);
+  if (!['calibre','ancho','peso','gramaje'].includes(field) || value == null || String(value).trim() === '') return value;
+  let text = String(value).trim();
+  if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(text)) text=text.replaceAll(',','');
+  else text=text.replace(',','.');
+  if (!/^\d+(\.\d+)?$/.test(text)) return value;
+  const [whole,fraction=''] = text.split('.'), places=field==='ancho'?1:0;
+  const digits=(fraction+'0').slice(0,places);
+  const rounded=BigInt(whole+digits)+(Number(fraction[places]||0)>=5?1n:0n);
+  if(rounded>BigInt(Number.MAX_SAFE_INTEGER))throw new Error('Número demasiado grande para importar con precisión');
+  return Number(rounded)/(10**places);
+}
 function importInventory(db, workbook, metadata, validate, hash) {
   const errors = [], pending = [], sheets = [];
   const ids = new Map(), hashes = new Map();
@@ -27,6 +41,7 @@ function importInventory(db, workbook, metadata, validate, hash) {
     for (const row of rows) {
       const number=row.__rowNum__+1, values=Object.fromEntries(Object.entries(row).map(([key,value])=>[normalize(key),value]));
       const before=errors.length;
+      for(const field of fields){try{values[field]=fitValue(field,values[field]);}catch(error){add(sheet,number,field,values[field],error.message);}}
       for(const field of fields) {
         try { validate({material:'TEST',[field]:values[field]}); }
         catch(error){ add(sheet,number,field,values[field],error.message); }
