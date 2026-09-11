@@ -89,7 +89,23 @@
   }
 
   async function importExcel(file) {
-    if(!file)return;try{const buffer=await file.arrayBuffer(),bytes=new Uint8Array(buffer);let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));const result=await request('/api/inventory/import',{method:'POST',body:JSON.stringify({fileName:file.name,content:btoa(binary)})});await load();toast(`${result.imported} importados · ${result.skipped} omitidos`);}catch(error){toast(error.message);}
+    if(!file)return;
+    root().querySelector('#inventoryImportErrors')?.remove();
+    const button=root().querySelector('#inventoryImport');button.disabled=true;button.textContent='Revisando archivo…';
+    try{
+      const buffer=await file.arrayBuffer(),bytes=new Uint8Array(buffer);let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
+      const response=await fetch('/api/inventory/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileName:file.name,content:btoa(binary)})}),result=await response.json();
+      if(!response.ok){
+        if(result.errors?.length){
+          const panel=document.createElement('section');panel.id='inventoryImportErrors';panel.setAttribute('role','alert');
+          panel.innerHTML=`<h3>No se importó ningún registro</h3><p>${safe(file.name)}: ${result.errors.length} errores. Corrija el archivo y vuelva a seleccionarlo.</p><div class="inventory-sheet" style="max-height:45vh;overflow:auto"><table><thead><tr><th>Hoja</th><th>Fila</th><th>Campo</th><th>Valor</th><th>Causa</th></tr></thead><tbody>${result.errors.map(e=>`<tr><td>${safe(e.sheet)}</td><td>${safe(String(e.row??'—'))}</td><td>${safe(e.field)}</td><td>${safe(e.value)}</td><td>${safe(e.cause)}</td></tr>`).join('')}</tbody></table></div>`;
+          root().querySelector('#inventoryContent').prepend(panel);panel.scrollIntoView({block:'start'});
+        }
+        throw new Error(result.error||'No se pudo importar');
+      }
+      await load();toast(`${result.imported} registros importados. Archivo completo validado.`);
+    }catch(error){toast(error.message);}
+    finally{button.disabled=false;button.textContent='Importar';const input=root().querySelector('#inventoryFile');if(input)input.value='';}
   }
 
   function renderMovements() {

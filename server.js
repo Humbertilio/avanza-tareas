@@ -452,29 +452,9 @@ async function api(req, res, url) {
       const input = await body(req), fileName = clean(input.fileName, 240), encoded = String(input.content || '');
       if (!fileName || !encoded || encoded.length > 10_000_000) return json(res, 400, { error: 'Archivo inválido o demasiado grande' });
       const buffer = Buffer.from(encoded, 'base64'), fileHash = crypto.createHash('sha256').update(buffer).digest('hex'), workbook = XLSX.read(buffer, { type: 'buffer' });
-      const result = await mutateDb(db => {
-        let imported = 0, skipped = 0; const sheets = [];
-        for (const sheetName of workbook.SheetNames) {
-          if (db.inventoryImports.some(record => record.fileHash === fileHash && record.sheetName === sheetName)) { sheets.push({ sheetName, duplicate: true }); continue; }
-          const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' }).slice(0, 10000);
-          let sheetImported = 0, sheetSkipped = 0;
-          for (const row of rows) {
-            const lower = Object.fromEntries(Object.entries(row).map(([key,value]) => [key.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''), value]));
-            try {
-              const values = validatedInventoryItem({ material: lower.material, calibre: lower.calibre, ancho: lower.ancho, peso: lower.peso, gramaje: lower.gramaje, ubicacion: lower.ubicacion, id: lower.id, observacion: lower.observacion, destino: lower.destino });
-              const rowHash = inventoryRowHash(values);
-              if ((values.externalId && db.inventoryItems.some(item => item.externalId.toLowerCase() === values.externalId.toLowerCase())) || db.inventoryItems.some(item => item.rowHash === rowHash)) { sheetSkipped++; continue; }
-              const now = new Date().toISOString(); db.inventoryItems.push({ id: crypto.randomUUID(), ...values, active: true, rowHash, createdAt: now, updatedAt: now }); sheetImported++;
-            } catch { sheetSkipped++; }
-          }
-          db.inventoryImports.push({ id: crypto.randomUUID(), fileName, fileHash, sheetName, importedRows: sheetImported, skippedRows: sheetSkipped, importedBy: user.name, importedAt: new Date().toISOString() });
-          imported += sheetImported; skipped += sheetSkipped; sheets.push({ sheetName, imported: sheetImported, skipped: sheetSkipped });
-        }
-        if (sheets.length && sheets.every(sheet => sheet.duplicate)) throw Object.assign(new Error('Este archivo ya fue importado'), { status: 409 });
-        return { imported, skipped, sheets };
-      });
+      const result = await mutateDb(db => require('./inventory-import').importInventory(db, workbook, {fileName,fileHash,importedBy:user.name}, validatedInventoryItem, inventoryRowHash));
       return json(res, 201, result);
-    } catch (error) { return json(res, error.status || 400, { error: error.message || 'No se pudo leer el archivo' }); }
+    } catch (error) { return json(res, error.status || 400, { error: error.message || 'No se pudo leer el archivo', errors: error.errors || [] }); }
   }
 
   if (req.method === 'GET' && url.pathname === '/api/tracking/status') {
