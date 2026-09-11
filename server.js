@@ -355,13 +355,22 @@ async function api(req, res, url) {
     const orders = user.role === 'admin' ? (db.purchaseRequests || []) : user.role === 'client' ? (db.purchaseRequests || []).filter(item => item.customerId === user.id) : [];
     return json(res, 200, {
       items,
-      materials: user.role === 'client' ? [] : inventoryMaterials(),
+      materials: user.role === 'client' ? [] : [...inventoryMaterials(),...(db.inventoryMaterials||[])].sort((a,b)=>a.material.localeCompare(b.material)),
       movements: user.role === 'client' ? [] : (db.inventoryMovements || []).slice().sort((a,b) => b.createdAt.localeCompare(a.createdAt)),
       imports: user.role === 'client' ? [] : (db.inventoryImports || []).slice().sort((a,b) => b.importedAt.localeCompare(a.importedAt)),
       orders: orders.slice().sort((a,b) => b.createdAt.localeCompare(a.createdAt))
     });
   }
 
+  if (req.method === 'POST' && url.pathname === '/api/inventory/materials') {
+    if(!['admin','employee','seller'].includes(user.role))return json(res,403,{error:'No autorizado para agregar materiales'});
+    try{
+      const input=await body(req),material=String(input.material||'').trim().toUpperCase(),descripcion=String(input.descripcion||'').trim();
+      if(!/^[A-Z0-9]{1,4}$/.test(material)||!descripcion||descripcion.length>100)return json(res,400,{error:'Indique un código alfanumérico de hasta 4 caracteres y una descripción de hasta 100'});
+      const result=await mutateDb(db=>{if([...inventoryMaterials(),...(db.inventoryMaterials||[])].some(m=>m.material.toUpperCase()===material))throw Object.assign(new Error('Ese código de material ya existe'),{status:409});const item={material,descripcion};(db.inventoryMaterials||=[]).push(item);return item;});
+      return json(res,201,{material:result});
+    }catch(error){return json(res,error.status||400,{error:error.message});}
+  }
   if (req.method === 'POST' && url.pathname === '/api/inventory/items') {
     if (!['admin','employee','seller'].includes(user.role)) return json(res, 403, { error: 'No autorizado' });
     try {
@@ -452,7 +461,12 @@ async function api(req, res, url) {
       const input = await body(req), fileName = clean(input.fileName, 240), encoded = String(input.content || '');
       if (!fileName || !encoded || encoded.length > 10_000_000) return json(res, 400, { error: 'Archivo inválido o demasiado grande' });
       const buffer = Buffer.from(encoded, 'base64'), fileHash = crypto.createHash('sha256').update(buffer).digest('hex'), workbook = XLSX.read(buffer, { type: 'buffer' });
-      const result = await mutateDb(db => require('./inventory-import').importInventory(db, workbook, {fileName,fileHash,importedBy:user.name}, validatedInventoryItem, inventoryRowHash));
+      let result;
+      try{result=await mutateDb(db => require('./inventory-import').importInventory(db, workbook, {fileName,fileHash,importedBy:user.name}, validatedInventoryItem, inventoryRowHash));}
+      catch(error){if(!error.errors?.length)throw error;
+        const report=await require('./inventory-error-workbook').errorWorkbook(buffer,workbook,error.errors);
+        return json(res,422,{error:error.message,errors:error.errors,report:{fileName:fileName.replace(/\.[^.]+$/,'')+' - errores.xlsx',content:report.toString('base64')}});
+      }
       return json(res, 201, result);
     } catch (error) { return json(res, error.status || 400, { error: error.message || 'No se pudo leer el archivo', errors: error.errors || [] }); }
   }
