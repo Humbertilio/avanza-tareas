@@ -6,6 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 const webpush = require('web-push');
 const XLSX = require('xlsx');
+const mobileHandler = require('./mobile-gps').createHandler({readDb,mutateDb,body,json,validPassword});
 const fieldHandler = require('./field-visits').createHandler({ readDb, mutateDb, body, json });
 
 const PORT = Number(process.env.PORT || 3000);
@@ -250,6 +251,7 @@ async function purgeExpiredTasks() {
 }
 
 async function api(req, res, url) {
+  if(await mobileHandler(req,res,url))return;
   if (req.method === 'POST' && url.pathname === '/api/client-applications') {
     const input=await body(req),company=input.company||{},contact=input.contact||{},name=clean(company.name,120),taxId=clean(company.taxId,60),address=clean(company.address,180),city=clean(company.city,100),companyPhone=clean(company.phone,60),contactName=clean(contact.name,100),position=clean(contact.position,100),phone=clean(contact.phone,60),email=clean(contact.email,120),username=clean(contact.username,60).toLowerCase(),password=String(contact.password||'');
     if(!name||!contactName||!/^[a-z0-9._-]{3,60}$/i.test(username)||password.length!==4)return json(res,400,{error:'Empresa, nombre, usuario y contraseña de 4 caracteres son obligatorios'});
@@ -485,11 +487,11 @@ async function api(req, res, url) {
     if (user.role !== 'seller') return json(res, 403, { error: 'No autorizado' });
     const input = await body(req), latitude = Number(input.latitude), longitude = Number(input.longitude), accuracy = Number(input.accuracy);
     if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180 || !Number.isFinite(accuracy) || accuracy < 0 || accuracy > 100000) return json(res, 400, { error: 'Ubicación inválida' });
-    try { const point = await mutateDb(db => { const session = db.trackingSessions.find(item => item.userId === user.id && !item.endedAt); if (!session) throw Object.assign(new Error('Inicie la jornada antes de compartir ubicación'), { status: 409 }); const now = new Date(), cutoff = now.getTime() - 30 * 86400000; db.locationPoints = db.locationPoints.filter(item => Date.parse(item.recordedAt) >= cutoff); const next = { id: crypto.randomUUID(), sessionId: session.id, userId: user.id, latitude, longitude, accuracy: Math.round(accuracy), recordedAt: now.toISOString() }; db.locationPoints.push(next); return next; }); return json(res, 201, { point }); } catch (error) { return json(res, error.status || 500, { error: error.message }); }
+    try { const point = await mutateDb(db => { const session = db.trackingSessions.find(item => item.userId === user.id && !item.endedAt); if (!session) throw Object.assign(new Error('Inicie la jornada antes de compartir ubicación'), { status: 409 }); if(session.source==='android')throw Object.assign(new Error('La ubicación de esta jornada se registra desde Android'),{status:409}); const now = new Date(), cutoff = now.getTime() - 30 * 86400000; db.locationPoints = db.locationPoints.filter(item => Date.parse(item.recordedAt) >= cutoff); const next = { id: crypto.randomUUID(), sessionId: session.id, userId: user.id, latitude, longitude, accuracy: Math.round(accuracy), recordedAt: now.toISOString() }; db.locationPoints.push(next); return next; }); return json(res, 201, { point }); } catch (error) { return json(res, error.status || 500, { error: error.message }); }
   }
   if (req.method === 'POST' && url.pathname === '/api/tracking/stop') {
     if (user.role !== 'seller') return json(res, 403, { error: 'No autorizado' });
-    await mutateDb(db => { const session = db.trackingSessions.find(item => item.userId === user.id && !item.endedAt); if (session) session.endedAt = new Date().toISOString(); }); return json(res, 200, { ok: true });
+    await mutateDb(db => { const session = db.trackingSessions.find(item => item.userId === user.id && !item.endedAt); if(session?.source==='android')throw Object.assign(new Error('Finalice la jornada desde Avanza Vendedores en Android'),{status:409});if (session) session.endedAt = new Date().toISOString(); }); return json(res, 200, { ok: true });
   }
   if (req.method === 'GET' && url.pathname === '/api/tracking/team') {
     if (user.role !== 'admin') return json(res, 403, { error: 'Sólo el administrador puede monitorear vendedores' });

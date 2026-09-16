@@ -2,7 +2,7 @@
 (() => {
   'use strict';
   let watch = null, lastSent = 0, sending = false, changing = false;
-  let active = null, signal = '', generation = 0;
+  let active = null, signal = '', generation = 0, nativeSession = false;
   const stopKey = () => `avanza-tracking-stop:${me.id}`;
   const pendingStop = () => Boolean(localStorage.getItem(stopKey()));
   const notify = () => window.dispatchEvent(new Event('journey-signal'));
@@ -29,7 +29,7 @@
   }
   async function flushStop() {
     if(!pendingStop())return;
-    stopWatch();await call('stop',{});localStorage.removeItem(stopKey());active=false;
+    stopWatch();try{await call('stop',{});}catch(error){if(error.status===409){const status=await call('status');if(status.session?.source==='android'){localStorage.removeItem(stopKey());active=true;nativeSession=true;return;}}throw error;}localStorage.removeItem(stopKey());active=false;
     signal='Jornada finalizada. GPS detenido.';notify();
   }
   async function load(userId) {
@@ -37,7 +37,7 @@
     if(me.role==='seller') {
       await flushStop();
       const epoch=generation, status=await call('status');
-      if(!changing&&epoch===generation){active=status.active;if(active)startWatch();else stopWatch();}
+      if(!changing&&epoch===generation){active=status.active;nativeSession=Boolean(status.active&&status.session?.source==='android');if(nativeSession){stopWatch();signal='Jornada registrada por Avanza Android cada 5 minutos. Finalícela desde esa aplicación.';}else if(active)startWatch();else stopWatch();}
       person={user:me,...status};
     } else {
       const {people}=await call('team');person=people.find(p=>p.user.id===userId)||null;
@@ -47,6 +47,7 @@
   }
   async function toggle() {
     if(changing || me.role!=='seller')return;
+    if(nativeSession){signal='Finalice esta jornada en Avanza Vendedores para detener el GPS del teléfono.';notify();return;}
     changing=true;notify();
     try {
       if(active || pendingStop()) {
@@ -55,11 +56,11 @@
       } else {
         if(!navigator.geolocation)throw new Error('Este dispositivo no ofrece GPS');
         await new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(resolve,()=>reject(new Error('Autoriza la ubicación para iniciar la jornada')),{enableHighAccuracy:true,timeout:15000,maximumAge:0}));
-        await call('start',{});active=true;signal='Jornada activa. Mantén Avanza abierta para compartir ubicación.';startWatch();
+        const result=await call('start',{});active=true;nativeSession=result.session?.source==='android';if(nativeSession){stopWatch();signal='Jornada activa en Avanza Android.';}else{signal='Jornada activa. Mantén Avanza abierta para compartir ubicación.';startWatch();}
       }
     } catch(error) {signal=pendingStop()?'GPS detenido. Cierre pendiente de sincronizar; se reintentará al recuperar conexión.':error.message;}
     finally {changing=false;notify();window.refreshJourney?.();}
   }
-  window.journeyTracking={load,toggle,state:()=>({active,signal,changing,pendingStop:me?.role==='seller'&&pendingStop()})};
+  window.journeyTracking={load,toggle,state:()=>({active,signal,changing,nativeSession,pendingStop:me?.role==='seller'&&pendingStop()})};
   window.addEventListener('online',()=>{if(me?.role==='seller')window.refreshJourney?.();});
 })();

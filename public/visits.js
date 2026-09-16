@@ -90,6 +90,7 @@
     if (!seller) seller=me.id;
     q('#visitSeller').innerHTML = s.sellers.map(u => `<option value="${esc(u.id)}">${esc(u.name)}</option>`).join('');
     q('#visitSeller').value=seller; q('#visitSeller').hidden=me.role!=='admin'; q('#journeySellerLabel').hidden=me.role!=='admin';
+    if(me.role==='seller'&&!q('#androidInstall')){const link=document.createElement('a');link.id='androidInstall';link.href='/android.html';link.textContent='Instalar Avanza para Android · GPS cada 5 min';q('#journeySignal').after(link);}
     q('#visitDay').value=day; q('#visitDay').hidden=false;
     document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed',String(b.dataset.mode===mode)));
     status(); renderRows(); journeyStatus(); setTimeout(() => map.invalidateSize(),0);
@@ -124,8 +125,8 @@
     const isActive=me.role==='seller'?state.active:person?.active;
     q('#journeyState').textContent=journeyError?'Estado sin actualizar':state.pendingStop?'Cierre pendiente':isActive?'Jornada activa':person||isActive===false?'Jornada detenida':'Sin jornada registrada';
     q('#journeyState').classList.toggle('active',Boolean(isActive)&&!journeyError);
-    const toggle=q('#journeyToggle');toggle.hidden=me.role!=='seller';toggle.disabled=state.changing;
-    toggle.textContent=state.changing?'Procesando…':state.pendingStop?'Reintentar cierre':state.active?'Finalizar jornada':'Iniciar jornada';
+    const toggle=q('#journeyToggle');toggle.hidden=me.role!=='seller';toggle.disabled=state.changing||state.nativeSession;
+    toggle.textContent=state.nativeSession?'Jornada Android':state.changing?'Procesando…':state.pendingStop?'Reintentar cierre':state.active?'Finalizar jornada':'Iniciar jornada';
     q('#journeySignal').textContent=journeyError||(me.role==='seller'?state.signal:'')||(journey?.loadedAt?'Monitoreo actualizado '+date(journey.loadedAt):'');
   }
   async function refreshJourney() {
@@ -152,7 +153,7 @@
         for(let i=0;i<track.length;i++){
           const p=track[i],prior=track[i-1],first=i===0,last=i===track.length-1;
           if(prior){
-            const gap=Date.parse(p.recordedAt)-Date.parse(prior.recordedAt)>120000;
+            const gap=Date.parse(p.recordedAt)-Date.parse(prior.recordedAt)>(session?.sampleIntervalMs?session.sampleIntervalMs+90000:120000);
             if(gap)gaps++;
             L.polyline([latlng(prior),latlng(p)],{color:gap?'#7c3aed':'#2563eb',weight:4,...(gap?{dashArray:'8 7'}:{})}).addTo(gpsLayers).bindTooltip(`${gap?'Tramo aproximado · sin GPS continuo':'Tramo GPS registrado'} · ${time(prior.recordedAt)} → ${time(p.recordedAt)}`);
           }
