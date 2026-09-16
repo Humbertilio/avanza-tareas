@@ -134,29 +134,45 @@
     try {
       const data=await window.journeyTracking.load(userId);
       if(requestId!==journeyRequest||userId!==seller)return;
-      journey=data;journeyError='';
+      if(!journey)fitNext=true;journey=data;journeyError='';
     } catch(error) {if(requestId!==journeyRequest)return;journeyError=error.status===401?'Inicia sesión para actualizar el monitoreo.':'No se pudo actualizar el GPS. Los datos visibles pueden estar desactualizados.';}
     journeyStatus();drawJourney();
   }
   function drawJourney() {
     if(!gpsLayers)return;
     gpsLayers.clearLayers();
-    const points=(journey?.points||[]).filter(p=>today(p.recordedAt)===day);
-    // Do not connect different sessions or long gaps as a continuous GPS trace.
+    const points=(journey?.points||[]).filter(p=>today(p.recordedAt)===day).sort((a,b)=>Date.parse(a.recordedAt)-Date.parse(b.recordedAt));
+    let gaps=0;
     if(visibleLayers.route) {
-      let segment=[];
-      const flush=()=>{if(segment.length>1)L.polyline(segment.map(latlng),{color:'#2563eb',weight:4}).addTo(gpsLayers);segment=[];};
-      for(const p of points){const prior=segment[segment.length-1];if(prior&&(p.sessionId!==prior.sessionId||Date.parse(p.recordedAt)-Date.parse(prior.recordedAt)>120000))flush();segment.push(p);}flush();
+      const groups=new Map();
+      for(const p of points){const key=p.sessionId||'sin-sesion';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(p);}
+      let number=0;
+      for(const [sessionId,track] of groups){
+        const session=journey?.sessions?.find(s=>s.id===sessionId);
+        for(let i=0;i<track.length;i++){
+          const p=track[i],prior=track[i-1],first=i===0,last=i===track.length-1;
+          if(prior){
+            const gap=Date.parse(p.recordedAt)-Date.parse(prior.recordedAt)>120000;
+            if(gap)gaps++;
+            L.polyline([latlng(prior),latlng(p)],{color:gap?'#7c3aed':'#2563eb',weight:4,...(gap?{dashArray:'8 7'}:{})}).addTo(gpsLayers).bindTooltip(`${gap?'Tramo aproximado · sin GPS continuo':'Tramo GPS registrado'} · ${time(prior.recordedAt)} → ${time(p.recordedAt)}`);
+          }
+          const endLabel=session?.endedAt?'Final GPS':'Último GPS';
+          const label=first&&last?'Único punto GPS':first?'Inicio GPS':last?endLabel:`Punto ${number+1}`;
+          const info=`${label} · ${date(p.recordedAt)} · Precisión ±${Math.round(p.accuracy)} m${first&&session?.startedAt?'<br>Inicio de jornada: '+date(session.startedAt):''}${last&&session?.endedAt?'<br>Cierre de jornada: '+date(session.endedAt):''}${last&&session&&!session.endedAt?'<br>Jornada sin cerrar':''}`;
+          L.circleMarker(latlng(p),{radius:first||last?8:5,color:'#fff',weight:2,fillColor:first?'#15803d':last?'#dc2626':'#2563eb',fillOpacity:1}).addTo(gpsLayers).bindPopup(info).bindTooltip(`${label} · ${time(p.recordedAt)}`,{permanent:first||last,direction:first?'top':'bottom'});
+          number++;
+        }
+      }
     }
     const latest=points[points.length-1];
-    if(visibleLayers.seller&&latest) {
+    if(visibleLayers.seller&&latest&&!visibleLayers.route) {
       const name=journey?.person?.user?.name||projected(read()).sellers.find(u=>u.id===seller)?.name||'Vendedor';
       L.circleMarker(latlng(latest),{radius:9,color:'#fff',weight:3,fillColor:'#2563eb',fillOpacity:1}).addTo(gpsLayers).bindTooltip(`${esc(name)} · ${date(latest.recordedAt)} · ±${Math.round(latest.accuracy)} m`);
     }
-    q('#journeyLegend').textContent=`● Clientes / llegadas · ● Vendedor · Azul: GPS (${points.length} puntos) · Naranja discontinuo: orden de visitas`;
+    q('#journeyLegend').textContent=points.length?`GPS: ${points.length} puntos · Verde: inicio GPS · Rojo: último/final GPS · Azul: tramos registrados · Morado discontinuo: aproximado (${gaps} intervalos sin GPS) · Naranja: orden de visitas. Inicio y final se ubican en el primer y último GPS disponibles.`:'No hay puntos GPS registrados para este vendedor en la fecha seleccionada.';
     if(fitNext) {
       const bounds=L.latLngBounds([]);
-      if(layers.getLayers().length)bounds.extend(layers.getBounds());
+      if(!gpsLayers.getLayers().length&&layers.getLayers().length)bounds.extend(layers.getBounds());
       if(gpsLayers.getLayers().length)bounds.extend(gpsLayers.getBounds());
       if(bounds.isValid()){map.fitBounds(bounds,{padding:[24,24],maxZoom:16});fitNext=false;}
     }

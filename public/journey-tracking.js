@@ -42,8 +42,8 @@
     } else {
       const {people}=await call('team');person=people.find(p=>p.user.id===userId)||null;
     }
-    const {points}=await call('history?userId='+encodeURIComponent(userId));
-    return {person,points,loadedAt:new Date().toISOString()};
+    const {points,sessions=[]}=await call('history?userId='+encodeURIComponent(userId));
+    return {person,points,sessions,loadedAt:new Date().toISOString()};
   }
   async function toggle() {
     if(changing || me.role!=='seller')return;
