@@ -169,11 +169,27 @@ function publicUser(user) {
 function clean(value, max = 200) { return String(value || '').trim().slice(0, max); }
 function validDate(value) { return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value + 'T00:00:00Z')); }
 function validPhone(value) { return !value || /^\d{3}-\d{3}-\d{4}$/.test(value); }
-function inventoryNumber(value, integer = true) {
+function inventoryNumber(value) {
   if (value === null || value === undefined || String(value).trim() === '') return null;
-  const normalized = integer ? String(value).trim().replace(/,/g, '') : String(value).trim().replace(',', '.');
-  if (integer ? !/^\d+$/.test(normalized) : !/^\d+(?:\.\d)?$/.test(normalized)) throw Object.assign(new Error(integer ? 'El valor debe ser entero' : 'Ancho admite máximo un decimal'), { status: 400 });
-  return Number(normalized);
+  const expand = text => {
+    const [mantissa, exponent='0'] = text.toLowerCase().split('e');
+    const [whole, fraction=''] = mantissa.split('.');
+    const digits=whole+fraction, position=whole.length+Number(exponent);
+    const decimal=position<=0?'0.'+'0'.repeat(-position)+digits:position>=digits.length?digits+'0'.repeat(position-digits.length):digits.slice(0,position)+'.'+digits.slice(position);
+    const [w,f='']=decimal.split('.');
+    return (w.replace(/^0+(?=\d)/,'')||'0')+(f.replace(/0+$/,'')?'.'+f.replace(/0+$/,''):'');
+  };
+  let normalized=String(value).trim();
+  if(typeof value==='number' && Number.isFinite(value) && value>=0) normalized=expand(normalized);
+  // One comma is a decimal separator. Grouped thousands remain valid with
+  // a decimal point, or with multiple groups (for example 1,234,567).
+  if(/^\d{1,3}(?:,\d{3})+\.\d+$/.test(normalized)||/^\d{1,3}(?:,\d{3}){2,}$/.test(normalized)) normalized=normalized.replaceAll(',','');
+  else normalized=normalized.replace(',','.');
+  if(!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(normalized)||!Number.isFinite(Number(normalized))) throw Object.assign(new Error('Indique un número válido mayor o igual a cero'),{status:400});
+  normalized=expand(normalized);
+  const number=Number(normalized);
+  // Preserve the exact decimal as text only when a JS number would lose digits.
+  return expand(String(number))===normalized?number:normalized;
 }
 function validatedInventoryItem(input) {
   const material = clean(input.material, 20), ubicacion = clean(input.ubicacion, 20), externalId = clean(input.externalId ?? input.id, 20), observacion = clean(input.observacion, 100), destino = clean(input.destino, 100);
@@ -181,7 +197,7 @@ function validatedInventoryItem(input) {
   if (ubicacion.length > 6 || (ubicacion && !/^[a-z0-9 ]+$/i.test(ubicacion))) throw Object.assign(new Error('Ubicación debe ser alfanumérica y tener máximo 6 caracteres'), { status: 400 });
   if (externalId.length > 7 || (externalId && !/^[a-z0-9]+$/i.test(externalId))) throw Object.assign(new Error('ID debe ser alfanumérico y tener máximo 7 caracteres'), { status: 400 });
   if (observacion.length > 40 || destino.length > 40) throw Object.assign(new Error('Observación y destino admiten máximo 40 caracteres'), { status: 400 });
-  return { material: material.toUpperCase(), calibre: inventoryNumber(input.calibre), ancho: inventoryNumber(input.ancho, false), peso: inventoryNumber(input.peso), gramaje: inventoryNumber(input.gramaje), ubicacion, externalId, observacion, destino };
+  return { material: material.toUpperCase(), calibre: inventoryNumber(input.calibre), ancho: inventoryNumber(input.ancho), peso: inventoryNumber(input.peso), gramaje: inventoryNumber(input.gramaje), ubicacion, externalId, observacion, destino };
 }
 function inventoryRowHash(item) { return crypto.createHash('sha256').update(JSON.stringify([item.material,item.calibre,item.ancho,item.peso,item.gramaje,item.ubicacion,item.externalId,item.observacion,item.destino])).digest('hex'); }
 function productPrice(value) {
