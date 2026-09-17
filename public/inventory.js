@@ -1,4 +1,5 @@
 (() => {
+  const numericFields = ['calibre','ancho','peso','gramaje'];
   const fields = ['material','calibre','ancho','peso','gramaje','ubicacion','externalId','observacion','destino'];
   const labels = {material:'MAT',calibre:'CAL',ancho:'ANC',peso:'PESO',gramaje:'GSM',ubicacion:'UBI',externalId:'ID',observacion:'Observación',destino:'Destino'};
   const widths = {material:4,calibre:4,ancho:4,peso:6,gramaje:3,ubicacion:3,externalId:7,observacion:15,destino:15};
@@ -45,7 +46,7 @@
     const visibleFields = me.role === 'client' ? clientFields : fields;
     return state.items.filter(item => visibleFields.every(key => !state.filters[key] || String(item[key] ?? '').toLowerCase().includes(state.filters[key].toLowerCase()))).sort((a,b) => {
       const av=a[state.sort.key], bv=b[state.sort.key];
-      return (typeof av==='number'&&typeof bv==='number' ? av-bv : String(av??'').localeCompare(String(bv??''),'es',{numeric:true,sensitivity:'base'}))*state.sort.dir;
+      return (numericFields.includes(state.sort.key)&&av!=null&&bv!=null ? av-bv : String(av??'').localeCompare(String(bv??''),'es',{numeric:true,sensitivity:'base'}))*state.sort.dir;
     });
   }
 
@@ -70,7 +71,7 @@
   function renderItems() {
     rememberDraft();
     const keys = me.role === 'client' ? clientFields : fields, items = visibleItems(), content = root().querySelector('#inventoryContent');
-    content.innerHTML = `<div class="inventory-count">${items.length}</div><div class="inventory-sheet"><table><thead><tr>${keys.map(key=>`<th data-sort="${key}" style="width:${widths[key]}ch;min-width:${widths[key]}ch" title="Ordenar">${labels[key]} ${state.sort.key===key?(state.sort.dir===1?'▲':'▼'):''}</th>`).join('')}</tr><tr class="inventory-filters">${keys.map(key=>`<th><input data-filter="${key}" value="${safe(state.filters[key]||'')}" aria-label="Filtrar ${labels[key]}"></th>`).join('')}</tr></thead><tbody>${items.map(item=>`<tr data-item="${item.id}" class="${item.active?'':'inactive'} ${state.selected.has(item.id)?'selected':''}">${keys.map(key=>`<td title="${safe(item[key]??'')}">${displayField(key,item[key])}</td>`).join('')}</tr>`).join('')}${me.role!=='client'?`<tr id="inventoryNewRow" class="inventory-new-row">${keys.map(key=>`<td><input data-new-field="${key}" maxlength="${{material:4,ubicacion:6,externalId:7,observacion:40,destino:40}[key]||20}" inputmode="${['calibre','peso','gramaje'].includes(key)?'numeric':key==='ancho'?'decimal':'text'}" aria-label="Nuevo ${labels[key]}" placeholder="${key==='material'?'＋':''}"></td>`).join('')}</tr>`:''}</tbody></table></div>`;
+    content.innerHTML = `<div class="inventory-count">${items.length}</div><div class="inventory-sheet"><table><thead><tr>${keys.map(key=>`<th data-sort="${key}" style="width:${widths[key]}ch;min-width:${widths[key]}ch" title="Ordenar">${labels[key]} ${state.sort.key===key?(state.sort.dir===1?'▲':'▼'):''}</th>`).join('')}</tr><tr class="inventory-filters">${keys.map(key=>`<th><input data-filter="${key}" value="${safe(state.filters[key]||'')}" aria-label="Filtrar ${labels[key]}"></th>`).join('')}</tr></thead><tbody>${items.map(item=>`<tr data-item="${item.id}" class="${item.active?'':'inactive'} ${state.selected.has(item.id)?'selected':''}">${keys.map(key=>`<td title="${safe(item[key]??'')}">${displayField(key,item[key])}</td>`).join('')}</tr>`).join('')}${me.role!=='client'?`<tr id="inventoryNewRow" class="inventory-new-row">${keys.map(key=>`<td><input data-new-field="${key}" ${numericFields.includes(key)?'':`maxlength="${{material:4,ubicacion:6,externalId:7,observacion:40,destino:40}[key]}"`} inputmode="${numericFields.includes(key)?'decimal':'text'}" aria-label="Nuevo ${labels[key]}" placeholder="${key==='material'?'＋':''}"></td>`).join('')}</tr>`:''}</tbody></table></div>`;
     content.querySelectorAll('[data-sort]').forEach(th=>th.addEventListener('click',()=>{const key=th.dataset.sort;if(state.sort.key===key)state.sort.dir*=-1;else state.sort={key,dir:1};renderItems();}));
     content.querySelectorAll('[data-filter]').forEach(input=>input.addEventListener('input',()=>{state.filters[input.dataset.filter]=input.value;renderItems();const next=root().querySelector(`[data-filter="${input.dataset.filter}"]`);next?.focus();next?.setSelectionRange(input.value.length,input.value.length);}));
     content.querySelectorAll('[data-item]').forEach(row=>{
@@ -173,7 +174,7 @@
     node.querySelector('[data-close]').focus({preventScroll:true});
   }
   async function deleteItem(item){if(!confirm('¿Borrar este artículo?'))return;try{await request(`/api/inventory/items/${item.id}`,{method:'DELETE'});closeModal();await load();toast('Artículo borrado');}catch(error){toast(error.message);}}
-  function itemInputs(item={}) { return fields.map(key=>`<label>${labels[key]}<input name="${key}" value="${safe(item[key]??'')}" ${key==='material'?'required':''} maxlength="${{material:4,ubicacion:6,externalId:7,observacion:40,destino:40}[key]||20}" inputmode="${['calibre','peso','gramaje'].includes(key)?'numeric':key==='ancho'?'decimal':'text'}"></label>`).join(''); }
+  function itemInputs(item={}) { return fields.map(key=>`<label>${labels[key]}<input name="${key}" value="${safe(item[key]??'')}" ${key==='material'?'required':''} ${numericFields.includes(key)?'':`maxlength="${{material:4,ubicacion:6,externalId:7,observacion:40,destino:40}[key]}"`} inputmode="${numericFields.includes(key)?'decimal':'text'}"></label>`).join(''); }
 
   function openItem(item=null) {
     const node=modal(`<form class="modal-card inventory-form"><div class="modal-heading"><h2>${item?'Editar':'Nuevo'}</h2><button type="button" data-close>×</button></div><div class="inventory-fields">${itemInputs(item||{})}</div><div class="modal-actions">${item&&me.role==='admin'?'<button type="button" class="inventory-delete">Borrar</button>':'<button type="button" data-close>Cancelar</button>'}<button class="primary">Guardar</button></div><p class="formMessage"></p></form>`);
