@@ -800,13 +800,13 @@ async function api(req, res, url) {
 
   if (req.method === 'POST' && url.pathname === '/api/machines') {
     if (user.role !== 'admin') return json(res, 403, { error: 'Solo el administrador puede crear maquinarias' });
-    const input = await body(req), name = clean(input.name, 100), responsibleId = clean(input.responsibleId, 100);
+    const input = await body(req), name = clean(input.name, 100), company = clean(input.company, 120), responsibleId = clean(input.responsibleId, 100);
     if (!name || !responsibleId) return json(res, 400, { error: 'Nombre y responsable son obligatorios' });
     try {
       const machine = await mutateDb(db => {
         if (!db.users.some(item => item.id === responsibleId && item.active)) throw Object.assign(new Error('El responsable no existe'), { status: 400 });
         if ((db.machines || []).some(item => item.name.toLowerCase() === name.toLowerCase())) throw Object.assign(new Error('Ya existe una maquinaria con ese nombre'), { status: 409 });
-        const now = new Date().toISOString(), next = { id: crypto.randomUUID(), name, responsibleId, createdAt: now, updatedAt: now };
+        const now = new Date().toISOString(), next = { id: crypto.randomUUID(), name, company, responsibleId, createdAt: now, updatedAt: now };
         db.machines ||= []; db.machines.push(next); return next;
       });
       return json(res, 201, { machine });
@@ -816,7 +816,7 @@ async function api(req, res, url) {
   const machineMatch = url.pathname.match(/^\/api\/machines\/([^/]+)$/);
   if (req.method === 'PATCH' && machineMatch) {
     if (user.role !== 'admin') return json(res, 403, { error: 'Solo el administrador puede editar maquinarias' });
-    const input = await body(req), name = clean(input.name, 100), responsibleId = clean(input.responsibleId, 100), machineId = machineMatch[1];
+    const input = await body(req), name = clean(input.name, 100), company = clean(input.company, 120), responsibleId = clean(input.responsibleId, 100), machineId = machineMatch[1];
     if (!name || !responsibleId) return json(res, 400, { error: 'Nombre y responsable son obligatorios' });
     try {
       const result = await mutateDb(db => {
@@ -825,7 +825,7 @@ async function api(req, res, url) {
         if (!db.users.some(item => item.id === responsibleId && item.active)) throw Object.assign(new Error('El responsable no existe'), { status: 400 });
         if (db.machines.some(item => item.id !== machineId && item.name.toLowerCase() === name.toLowerCase())) throw Object.assign(new Error('Ya existe una maquinaria con ese nombre'), { status: 409 });
         const changed = found.responsibleId !== responsibleId;
-        found.name = name; found.responsibleId = responsibleId; found.updatedAt = new Date().toISOString();
+        found.name = name; found.company = company; found.responsibleId = responsibleId; found.updatedAt = new Date().toISOString();
         if (changed) (db.machineTasks || []).filter(task => task.machineId === machineId && task.progress < 100).forEach(task => { task.assigneeId = responsibleId; task.acknowledgedAt = null; task.updatedAt = found.updatedAt; });
         return { machine: found, changed };
       });
