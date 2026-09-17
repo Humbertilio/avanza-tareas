@@ -312,10 +312,10 @@ async function api(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/products') {
     return json(res, 200, { products: (readDb().products || []).slice().sort((a,b) => a.div.localeCompare(b.div,'es') || a.product.localeCompare(b.product,'es')) });
   }
-  if (req.method === 'POST' && url.pathname === '/api/products/orders') {
+  if (req.method === 'POST' && ['/api/products/orders', '/api/inventory/orders'].includes(url.pathname)) {
     try {
       const input = await body(req);
-      const result = await mutateDb(db => require('./product-orders').createOrder(db, user, input));
+      const result = await mutateDb(db => require('./product-orders')[url.pathname === '/api/inventory/orders' ? 'createInventoryOrder' : 'createOrder'](db, user, input));
       if (!result.duplicate) {
         const db = readDb(), message = db.messages.find(item => item.id === result.order.messageId);
         emitConversation(db, message.conversationId, 'message', publicMessage(db, message));
@@ -370,7 +370,11 @@ async function api(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/inventory') {
     const db = readDb();
     const items = (db.inventoryItems || []).filter(item => user.role !== 'client' || item.active);
-    const orders = user.role === 'admin' ? (db.purchaseRequests || []) : user.role === 'client' ? (db.purchaseRequests || []).filter(item => item.customerId === user.id) : [];
+    const orders = user.role === 'admin' ? (db.purchaseRequests || []).slice() : user.role === 'client' ? (db.purchaseRequests || []).filter(item => item.customerId === user.id) : [];
+    for (const order of db.productOrders || []) {
+      if (order.source !== 'inventory' || !(user.role === 'admin' || (user.role === 'client' && order.clientId === user.id))) continue;
+      orders.push({ id: order.id, source: 'inventory', customer: order.clientName, comments: order.note, itemIds: order.items.map(item => item.inventoryItemId), itemNames: order.items.map(item => item.product), status: order.status, createdAt: order.createdAt, conversationId: order.conversationId });
+    }
     return json(res, 200, {
       items,
       materials: user.role === 'client' ? [] : [...inventoryMaterials(),...(db.inventoryMaterials||[])].sort((a,b)=>a.material.localeCompare(b.material)),
@@ -444,21 +448,6 @@ async function api(req, res, url) {
         db.inventoryMovements.push(next); return next;
       });
       return json(res, 201, { movement });
-    } catch (error) { return json(res, error.status || 500, { error: error.message }); }
-  }
-
-  if (req.method === 'POST' && url.pathname === '/api/inventory/orders') {
-    if (user.role !== 'client') return json(res, 403, { error: 'Solo los clientes pueden enviar solicitudes' });
-    const input = await body(req), itemIds = [...new Set(Array.isArray(input.itemIds) ? input.itemIds.map(id => clean(id, 100)) : [])], comments = clean(input.comments, 500);
-    if (!itemIds.length) return json(res, 400, { error: 'Selecciona al menos un artículo' });
-    try {
-      const order = await mutateDb(db => {
-        if (itemIds.some(id => !db.inventoryItems.some(item => item.id === id && item.active))) throw Object.assign(new Error('Uno de los artículos ya no está disponible'), { status: 409 });
-        const next = { id: crypto.randomUUID(), customerId: user.id, customer: user.name, companyId: user.companyId || null, comments, itemIds, status: 'pending', createdAt: new Date().toISOString() };
-        db.purchaseRequests.push(next); return next;
-      });
-      await Promise.all(readDb().users.filter(account => account.role === 'admin' && account.active).map(account => notifyUser(account.id, { title: 'Nueva solicitud de inventario', body: `${user.name} seleccionó ${itemIds.length} artículo(s)`, url: '/#inventory' })));
-      return json(res, 201, { order });
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
   }
 

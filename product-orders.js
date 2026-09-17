@@ -3,20 +3,38 @@ const crypto = require('node:crypto');
 const XLSX = require('xlsx');
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
 
-function createOrder(db, user, input) {
+function createInventoryOrder(db, user, input) {
+  return createOrder(db, user, input, 'inventory');
+}
+function createOrder(db, user, input, source = 'products') {
   if (user.role !== 'client') fail('Solo los clientes pueden enviar pedidos', 403);
   if (typeof input.requestId !== 'string' || !/^[\w-]{16,100}$/.test(input.requestId)) fail('Identificador de pedido no válido');
   db.productOrders ||= [];
   const previous = db.productOrders.find(order => order.clientId === user.id && order.requestId === input.requestId);
-  if (previous) return { order: previous, duplicate: true };
+  if (previous) {
+    if ((previous.source || 'products') !== source) fail('Identificador utilizado en otro pedido', 409);
+    return { order: previous, duplicate: true };
+  }
   const client = db.users.find(item => item.id === user.id && item.active && item.role === 'client');
   const group = client && db.conversations.find(item => item.type === 'group' && item.companyId === client.companyId && item.settings?.clientGroup && db.conversationParticipants.some(p => p.conversationId === item.id && p.userId === client.id));
   if (!group) fail('El cliente no tiene un grupo de chat asignado. Contacte al administrador.', 409);
+  if (source === 'inventory') {
+    if (!Array.isArray(input.itemIds) || !input.itemIds.length || input.itemIds.length > 2000) fail('Seleccione entre 1 y 2000 artículos');
+    if (input.comments != null && (typeof input.comments !== 'string' || input.comments.length > 500)) fail('Comentarios no válidos');
+    input = { ...input, items: input.itemIds.map(productId => ({ productId })) };
+  }
   if (!Array.isArray(input.items) || !input.items.length || input.items.length > 2000) fail('Seleccione entre 1 y 2000 productos');
   const seen = new Set();
   const items = input.items.map(line => {
     if (!line || seen.has(line.productId)) fail('Producto repetido o no válido');
     seen.add(line.productId);
+    if (source === 'inventory') {
+      const item = (db.inventoryItems || []).find(row => row.id === line.productId && row.active);
+      if (!item) fail('Un artículo ya no está disponible. Regrese al listado.', 409);
+      const details = [['material','Material'],['externalId','ID'],['calibre','Calibre'],['ancho','Ancho'],['peso','Peso'],['gramaje','Gramaje'],['observacion','Observación']];
+      const product = details.filter(([key]) => item[key] != null && item[key] !== '').map(([key,label]) => `${label}: ${item[key]}`).join(' · ');
+      return { productId: item.id, inventoryItemId: item.id, product, quantity: 1, price3: null, amount: null };
+    }
     const product = db.products.find(p => p.id === line.productId);
     if (!product) fail('Un producto ya no está disponible. Regrese al listado.', 409);
     if (typeof line.quantity !== 'number' || !Number.isFinite(line.quantity) || line.quantity <= 0 || line.quantity > 1000000 || Math.abs(line.quantity * 1000 - Math.round(line.quantity * 1000)) > 0.000001) fail('La cantidad debe ser positiva, con un máximo de tres decimales');
@@ -29,6 +47,7 @@ function createOrder(db, user, input) {
   const now = new Date().toISOString(), id = crypto.randomUUID();
   const order = { id, number: `PED-${now.slice(0,10).replaceAll('-','')}-${id.slice(0,8).toUpperCase()}`, requestId: input.requestId, clientId: client.id, clientName: client.name, clientPhone: client.phone || '', companyId: client.companyId, conversationId: group.id, items, createdAt: now };
   Object.assign(order, { status: 'sent', revision: 1, note: '', updatedAt: now, history: [] });
+  if (source === 'inventory') { order.source = source; order.note = String(input.comments || '').trim(); }
   snapshot(order, user, 'sent');
   const message = { id: crypto.randomUUID(), orderId: id, conversationId: group.id, senderId: client.id, type: 'text', text: `Pedido ${order.number} · ${client.name}`, replyToMessageId: null, forwardedFromMessageId: null, deletedAt: null, createdAt: now, updatedAt: now };
   order.messageId = message.id;
@@ -126,4 +145,4 @@ function updateOrder(db, user, id, input) {
   db.conversations.find(c => c.id === order.conversationId).updatedAt = order.updatedAt;
   return { order, message, duplicate: false };
 }
-module.exports = { createOrder, buildWorkbook, updateOrder, getOrder, publicOrder };
+module.exports = { createOrder, createInventoryOrder, buildWorkbook, updateOrder, getOrder, publicOrder };
