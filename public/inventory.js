@@ -9,7 +9,7 @@
   const safe = value => escapeHtml(String(value ?? ''));
   const display = value => value === null || value === undefined || value === '' ? '—' : safe(value);
   const displayField = (key,value) => key === 'peso' && value !== null && value !== undefined && value !== '' ? safe(Number(value).toLocaleString('en-US',{maximumFractionDigits:0})) : display(value);
-  const statusText = value => ({pending:'Pendiente',review:'Revisión',approved:'Aprobada',rejected:'Rechazada',completed:'Completada'})[value] || value;
+  const statusText = value => ({sent:'Enviado',quoting:'En cotización',quoted:'Por aprobar',changes_requested:'Cambios solicitados',pending:'Pendiente',review:'Revisión',approved:'Aprobada',rejected:'Rechazada',completed:'Completada'})[value] || value;
   let draft = {}, modalReturn = null;
   const inventoryActive = () => !document.querySelector('#inventoryView').classList.contains('hidden');
   function rememberDraft() {
@@ -215,9 +215,17 @@
     root().querySelector('#inventoryContent').innerHTML=`<div class="inventory-sheet inventory-history"><table><thead><tr><th>Material</th><th>Calibre</th><th>Ancho</th><th>Fecha</th><th>Destino</th><th>Observación</th></tr></thead><tbody>${state.movements.map(row=>`<tr><td>${display(row.material)}</td><td>${display(row.calibre)}</td><td>${display(row.ancho)}</td><td>${safe(dateTimeText(row.createdAt))}</td><td>${display(row.destination||'Entrada')}</td><td>${display(row.note)}</td></tr>`).join('')}</tbody></table>${state.movements.length?'':'<p class="inventory-empty">Sin movimientos</p>'}</div>`;
   }
 
+  function bindChatLinks() {
+    root().querySelectorAll('a[href^="/#chat/"]').forEach(link=>link.addEventListener('click',event=>{
+      if(!window.openChatConversation)return;
+      event.preventDefault();
+      window.openChatConversation(decodeURIComponent(link.getAttribute('href').slice(7))).catch(error=>toast(error.message));
+    }));
+  }
   function renderOrders() {
     const itemName=id=>{const item=state.items.find(row=>row.id===id);return item?`${item.material} ${item.externalId||''}`:`#${id}`};
-    root().querySelector('#inventoryContent').innerHTML=`<div class="inventory-sheet inventory-orders"><table><thead><tr>${me.role==='admin'?'<th>Cliente</th>':''}<th>Artículos</th><th>Comentarios</th><th>Fecha</th><th>Estado</th></tr></thead><tbody>${state.orders.map(order=>`<tr>${me.role==='admin'?`<td>${safe(order.customer)}</td>`:''}<td>${order.itemIds.map(itemName).map(safe).join(', ')}</td><td>${display(order.comments)}</td><td>${safe(dateTimeText(order.createdAt))}</td><td>${me.role==='admin'?`<select data-order="${order.id}">${['pending','review','approved','rejected','completed'].map(value=>`<option value="${value}" ${order.status===value?'selected':''}>${statusText(value)}</option>`).join('')}</select>`:safe(statusText(order.status))}</td></tr>`).join('')}</tbody></table>${state.orders.length?'':'<p class="inventory-empty">Sin solicitudes</p>'}</div>`;
+    root().querySelector('#inventoryContent').innerHTML=`<div class="inventory-sheet inventory-orders"><table><thead><tr>${me.role==='admin'?'<th>Cliente</th>':''}<th>Artículos</th><th>Comentarios</th><th>Fecha</th><th>Estado</th></tr></thead><tbody>${state.orders.map(order=>`<tr>${me.role==='admin'?`<td>${safe(order.customer)}</td>`:''}<td>${(order.itemNames || order.itemIds.map(itemName)).map(safe).join(', ')}</td><td>${display(order.comments)}</td><td>${safe(dateTimeText(order.createdAt))}</td><td>${order.source==='inventory'?`${safe(statusText(order.status))} · <a href="/#chat/${encodeURIComponent(order.conversationId)}">Ver pedido en el chat</a>`:me.role==='admin'?`<select data-order="${order.id}">${['pending','review','approved','rejected','completed'].map(value=>`<option value="${value}" ${order.status===value?'selected':''}>${statusText(value)}</option>`).join('')}</select>`:safe(statusText(order.status))}</td></tr>`).join('')}</tbody></table>${state.orders.length?'':'<p class="inventory-empty">Sin solicitudes</p>'}</div>`;
+    bindChatLinks();
     root().querySelectorAll('[data-order]').forEach(select=>select.addEventListener('change',async()=>{try{await request(`/api/inventory/orders/${select.dataset.order}`,{method:'PATCH',body:JSON.stringify({status:select.value})});await load();toast('Solicitud actualizada');}catch(error){toast(error.message);}}));
   }
 
@@ -225,10 +233,27 @@
     root().querySelector('#inventoryContent').innerHTML=`<div class="inventory-sheet"><table><thead><tr><th>Archivo</th><th>Hoja</th><th>Importados</th><th>Omitidos</th><th>Usuario</th><th>Fecha</th></tr></thead><tbody>${state.imports.map(row=>`<tr><td>${safe(row.fileName)}</td><td>${safe(row.sheetName)}</td><td>${row.importedRows}</td><td>${row.skippedRows}</td><td>${safe(row.importedBy)}</td><td>${safe(dateTimeText(row.importedAt))}</td></tr>`).join('')}</tbody></table>${state.imports.length?'':'<p class="inventory-empty">Sin importaciones</p>'}</div>`;
   }
 
+  let pendingOrder = null;
   function openCart() {
-    const chosen=[...state.selected].map(id=>state.items.find(item=>item.id===id)).filter(Boolean), node=modal(`<form class="modal-card inventory-cart"><div class="modal-heading"><h2>Solicitud</h2><button type="button" data-close>×</button></div><div class="inventory-cart-items">${chosen.map(item=>`<p><b>${safe(item.material)}</b> · ${safe(item.externalId||'Sin ID')} · ${display(item.ancho)}</p>`).join('')}</div><label>Comentarios<textarea name="comments" maxlength="500" rows="5"></textarea></label><button class="primary">Enviar</button><p class="formMessage"></p></form>`);
+    const chosen=[...state.selected].map(id=>state.items.find(item=>item.id===id)).filter(Boolean), node=modal(`<form class="modal-card inventory-cart"><div class="modal-heading"><h2>Solicitud</h2><button type="button" data-close>×</button></div><div class="inventory-cart-items">${chosen.map(item=>`<p><b>${safe(item.material)}</b> · ${safe(item.externalId||'Sin ID')} · ${display(item.ancho)}</p>`).join('')}</div><label>Comentarios<textarea name="comments" maxlength="500" rows="5"></textarea></label><button class="primary" type="submit">Enviar al chat</button><p class="formMessage"></p></form>`);
     node.querySelector('[data-close]').addEventListener('click',closeModal);
-    node.querySelector('form').addEventListener('submit',async event=>{event.preventDefault();const form=event.target;try{await request('/api/inventory/orders',{method:'POST',body:JSON.stringify({itemIds:[...state.selected],comments:new FormData(form).get('comments')})});state.selected.clear();state.tab='orders';closeModal();await load();toast('Solicitud enviada');}catch(error){form.querySelector('.formMessage').textContent=error.message;}});
+    node.querySelector('form').addEventListener('submit',async event=>{
+      event.preventDefault(); const form=event.target, button=form.querySelector('[type="submit"]');
+      if(button.disabled)return;
+      const payload={itemIds:chosen.map(item=>item.id),comments:new FormData(form).get('comments')};
+      const signature=JSON.stringify(payload);
+      if(!pendingOrder || pendingOrder.signature!==signature)pendingOrder={signature,requestId:crypto.randomUUID()};
+      button.disabled=true;
+      try {
+        const result=await request('/api/inventory/orders',{method:'POST',body:JSON.stringify({...payload,requestId:pendingOrder.requestId})});
+        pendingOrder=null;state.selected.clear();state.tab='orders';closeModal();
+        await load();toast('Pedido enviado al chat');
+        const confirmation=document.createElement('p'),link=document.createElement('a');
+        link.href='/#chat/'+encodeURIComponent(result.order.conversationId);link.textContent='Ver pedido en el chat';confirmation.appendChild(link);root().prepend(confirmation);
+        link.addEventListener('click',event=>{if(window.openChatConversation){event.preventDefault();window.openChatConversation(result.order.conversationId).catch(error=>toast(error.message));}});
+      }catch(error){form.querySelector('.formMessage').textContent=error.message;}
+      finally{button.disabled=false;}
+    });
   }
 
   window.loadInventory = () => load().catch(error=>{root().innerHTML=`<p class="inventory-empty">${safe(error.message)}</p>`;});
