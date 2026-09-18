@@ -60,7 +60,8 @@ function initialDatabase() {
     purchaseRequests: [],
     trackingSessions: [],
     locationPoints: [],
-    products: []
+    products: [],
+    productImages: []
   };
 }
 
@@ -101,6 +102,7 @@ function configurePush() {
     if (!Array.isArray(db[collection])) { db[collection] = []; changed = true; }
   }
   if (!Array.isArray(db.products)) { db.products = []; changed = true; }
+  if (!Array.isArray(db.productImages)) { db.productImages = []; changed = true; }
   if (!db.meta.productsSeeded && fs.existsSync(PRODUCTS_SEED_FILE)) {
     if (!db.products.length) {
       const now = new Date().toISOString();
@@ -233,6 +235,7 @@ function clientChatContacts(db, user) {
   return db.users.filter(person => person.active && person.id !== user.id && (person.role === 'admin' || (person.role === 'seller' && groups.some(c => chatParticipant(db,c.id,person.id)))));
 }
 function publicAttachment(item) { return { id: item.id, name: item.name, mimeType: item.mimeType, size: item.size, url: `/api/chat/attachments/${item.id}` }; }
+function publicProduct(db, item) { return { ...item, images: (db.productImages || []).filter(image => image.productId === item.id).sort((a,b) => a.position-b.position || a.createdAt.localeCompare(b.createdAt)).map(image => ({ id:image.id, name:image.name, mimeType:image.mimeType, size:image.size, url:`/api/products/images/${image.id}` })) }; }
 function publicMessage(db, message) {
   const order = message.orderId && (db.productOrders || []).find(o => o.id === message.orderId && o.conversationId === message.conversationId && o.messageId === message.id);
   message = { ...message, order: order ? require('./product-orders').publicOrder(order) : undefined };
@@ -310,8 +313,11 @@ async function api(req, res, url) {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/products') {
-    return json(res, 200, { products: (readDb().products || []).slice().sort((a,b) => a.div.localeCompare(b.div,'es') || a.product.localeCompare(b.product,'es')) });
+    const db=readDb();
+    return json(res, 200, { products: (db.products || []).slice().sort((a,b) => a.div.localeCompare(b.div,'es') || a.product.localeCompare(b.product,'es')).map(item=>publicProduct(db,item)) });
   }
+  const productImageFileMatch=url.pathname.match(/^\/api\/products\/images\/([^/]+)$/);
+  if(req.method==='GET'&&productImageFileMatch){const image=(readDb().productImages||[]).find(item=>item.id===productImageFileMatch[1]);if(!image)return json(res,404,{error:'Imagen no encontrada'});const file=Buffer.from(image.data,'base64');res.writeHead(200,{'Content-Type':image.mimeType,'Content-Length':file.length,'Content-Disposition':`inline; filename*=UTF-8''${encodeURIComponent(image.name)}`,'Cache-Control':'private, max-age=3600'});return res.end(file);}
   if (req.method === 'POST' && ['/api/products/orders', '/api/inventory/orders'].includes(url.pathname)) {
     try {
       const input = await body(req);
@@ -349,21 +355,25 @@ async function api(req, res, url) {
     try {
       const values = validatedProduct(await body(req));
       const product = await mutateDb(db => { const now=new Date().toISOString(),next={id:crypto.randomUUID(),...values,createdAt:now,updatedAt:now};db.products.push(next);return next; });
-      return json(res, 201, { product });
+      return json(res, 201, { product:publicProduct(readDb(),product) });
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
   }
   const productMatch = url.pathname.match(/^\/api\/products\/([^/]+)$/);
+  const productImagesMatch=url.pathname.match(/^\/api\/products\/([^/]+)\/images$/);
+  if(req.method==='POST'&&productImagesMatch){if(user.role!=='admin')return json(res,403,{error:'Solo el administrador puede agregar fotografías'});try{const input=await body(req),files=Array.isArray(input.images)?input.images:[];if(!files.length)return json(res,400,{error:'Seleccione al menos una fotografía'});const images=await mutateDb(db=>{const product=db.products.find(item=>item.id===productImagesMatch[1]);if(!product)throw Object.assign(new Error('Producto no encontrado'),{status:404});db.productImages||=[];const current=db.productImages.filter(item=>item.productId===product.id);if(current.length+files.length>10)throw Object.assign(new Error('Máximo 10 fotografías por producto'),{status:400});const now=new Date().toISOString(),prepared=files.map((file,index)=>{const name=clean(file.name,180)||`producto-${index+1}.jpg`,mimeType=clean(file.mimeType,50),match=String(file.data||'').match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/i);if(!match||!['image/jpeg','image/png','image/webp'].includes(mimeType))throw Object.assign(new Error('Use fotografías JPG, PNG o WebP'),{status:400});const data=match[2],size=Buffer.byteLength(data,'base64');if(size>2_000_000)throw Object.assign(new Error('Cada fotografía debe pesar menos de 2 MB'),{status:413});return{id:crypto.randomUUID(),productId:product.id,name,mimeType,size,data,position:current.length+index,createdAt:now};});db.productImages.push(...prepared);product.updatedAt=now;return prepared;});return json(res,201,{images:images.map(image=>({id:image.id,name:image.name,mimeType:image.mimeType,size:image.size,url:`/api/products/images/${image.id}`}))});}catch(error){return json(res,error.status||500,{error:error.message});}}
+  const productImageMatch=url.pathname.match(/^\/api\/products\/([^/]+)\/images\/([^/]+)$/);
+  if(req.method==='DELETE'&&productImageMatch){if(user.role!=='admin')return json(res,403,{error:'Solo el administrador puede eliminar fotografías'});try{await mutateDb(db=>{const index=(db.productImages||[]).findIndex(image=>image.id===productImageMatch[2]&&image.productId===productImageMatch[1]);if(index<0)throw Object.assign(new Error('Fotografía no encontrada'),{status:404});db.productImages.splice(index,1);db.productImages.filter(image=>image.productId===productImageMatch[1]).sort((a,b)=>a.position-b.position).forEach((image,position)=>image.position=position);});return json(res,200,{ok:true});}catch(error){return json(res,error.status||500,{error:error.message});}}
   if (req.method === 'PATCH' && productMatch) {
     if (user.role !== 'admin') return json(res, 403, { error: 'Solo el administrador puede modificar productos' });
     try {
       const values = validatedProduct(await body(req));
       const product = await mutateDb(db => { const found=db.products.find(item=>item.id===productMatch[1]);if(!found)throw Object.assign(new Error('Producto no encontrado'),{status:404});Object.assign(found,values,{updatedAt:new Date().toISOString()});return found; });
-      return json(res, 200, { product });
+      return json(res, 200, { product:publicProduct(readDb(),product) });
     } catch (error) { return json(res, error.status || 500, { error: error.message }); }
   }
   if (req.method === 'DELETE' && productMatch) {
     if (user.role !== 'admin') return json(res, 403, { error: 'Solo el administrador puede borrar productos' });
-    try { await mutateDb(db=>{const index=db.products.findIndex(item=>item.id===productMatch[1]);if(index<0)throw Object.assign(new Error('Producto no encontrado'),{status:404});db.products.splice(index,1);});return json(res,200,{ok:true}); }
+    try { await mutateDb(db=>{const index=db.products.findIndex(item=>item.id===productMatch[1]);if(index<0)throw Object.assign(new Error('Producto no encontrado'),{status:404});db.products.splice(index,1);db.productImages=(db.productImages||[]).filter(image=>image.productId!==productMatch[1]);});return json(res,200,{ok:true}); }
     catch (error) { return json(res,error.status||500,{error:error.message}); }
   }
 
