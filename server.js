@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const webpush = require('web-push');
 const XLSX = require('xlsx');
 const mobileHandler = require('./mobile-gps').createHandler({readDb,mutateDb,body,json,validPassword});
+const payrollHandler = require('./payroll-punches').createHandler({readDb,mutateDb,body,json,currentUser,passwordHash,emitConversation});
 const fieldHandler = require('./field-visits').createHandler({ readDb, mutateDb, body, json });
 
 const PORT = Number(process.env.PORT || 3000);
@@ -19,7 +20,7 @@ const MATERIALS_FILE = path.join(__dirname, 'seed', 'materials.json');
 const SESSION_HOURS = 12;
 const TASK_RETENTION_MS = Number(process.env.TASK_RETENTION_MS || 48 * 60 * 60 * 1000);
 const STATUSES = [0, 25, 50, 75, 100];
-const ROLES = ['admin', 'employee', 'seller', 'client'];
+const ROLES = ['admin', 'employee', 'seller', 'client', 'payroll_employee'];
 const sessions = new Map();
 const chatStreams = new Map();
 let writeQueue = Promise.resolve();
@@ -227,6 +228,9 @@ function requireUser(req, res) {
 function chatParticipant(db, conversationId, userId) { return (db.conversationParticipants || []).find(item => item.conversationId === conversationId && item.userId === userId); }
 function chatUserIds(db, conversationId) { return (db.conversationParticipants || []).filter(item => item.conversationId === conversationId).map(item => item.userId); }
 function emitChat(userId, event, payload) {
+  if(!chatStreams.has(userId))return;
+  const eventDb=readDb(),eventUser=eventDb.users.find(u=>u.id===userId);
+  if(eventUser?.role==='payroll_employee'&&!require('./payroll-chat').owns(eventDb,eventUser,payload.conversationId))return;
   for (const res of chatStreams.get(userId) || []) res.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
 }
 function emitConversation(db, conversationId, event, payload) { chatUserIds(db, conversationId).forEach(userId => emitChat(userId, event, payload)); }
@@ -270,6 +274,7 @@ async function purgeExpiredTasks() {
 }
 
 async function api(req, res, url) {
+  if(await payrollHandler(req,res,url))return;
   if(await mobileHandler(req,res,url))return;
   if (req.method === 'POST' && url.pathname === '/api/client-applications') {
     const input=await body(req),company=input.company||{},contact=input.contact||{},name=clean(company.name,120),taxId=clean(company.taxId,60),address=clean(company.address,180),city=clean(company.city,100),companyPhone=clean(company.phone,60),contactName=clean(contact.name,100),position=clean(contact.position,100),phone=clean(contact.phone,60),email=clean(contact.email,120),username=clean(contact.username,60).toLowerCase(),password=String(contact.password||'');
@@ -295,6 +300,7 @@ async function api(req, res, url) {
 
   const user = requireUser(req, res);
   if (!user) return;
+  if (user.role === 'payroll_employee' && !require('./payroll-chat').allowed(readDb(),user,req,url)) return json(res, 403, { error: 'Emp Nomina solo tiene acceso a su chat de Nómina' });
   if (await fieldHandler(req, res, url, user)) return;
 
   if (req.method === 'GET' && url.pathname === '/api/me') return json(res, 200, { user: publicUser(user) });
@@ -591,7 +597,7 @@ async function api(req, res, url) {
   if(req.method==='POST'&&contactMatch&&!contactMatch[2]){if(user.role!=='admin')return json(res,403,{error:'Solo el administrador puede agregar contactos'});const input=await body(req),name=clean(input.name,100),username=clean(input.username,60).toLowerCase(),password=String(input.password||''),position=clean(input.position,100),phone=clean(input.phone,60),email=clean(input.email,120);if(!name||!/^[a-z0-9._-]{3,60}$/i.test(username)||password.length!==4)return json(res,400,{error:'Nombre, usuario y contraseña de 4 caracteres son obligatorios'});try{const contact=await mutateDb(db=>{const company=db.companies.find(item=>item.id===contactMatch[1]);if(!company)throw Object.assign(new Error('Empresa no encontrada'),{status:404});if(db.users.some(item=>item.username.toLowerCase()===username))throw Object.assign(new Error('El usuario ya existe'),{status:409});const conversation=db.conversations.find(item=>item.companyId===company.id),now=new Date().toISOString(),credentials=passwordHash(password),next={id:crypto.randomUUID(),name,username,role:'client',companyId:company.id,position,phone,email,active:true,salt:credentials.salt,passwordHash:credentials.hash,createdAt:now};if(!conversation)throw Object.assign(new Error('Configura primero el chat del cliente desde Modificar'),{status:409});db.users.push(next);db.conversationParticipants.push({id:crypto.randomUUID(),conversationId:conversation.id,userId:next.id,role:'member',joinedAt:now,lastReadAt:null,lastReadMessageId:null,muted:false});return publicUser(next);});return json(res,201,{contact});}catch(error){return json(res,error.status||500,{error:error.message});}}
   if(req.method==='PATCH'&&contactMatch&&contactMatch[2]){if(user.role!=='admin')return json(res,403,{error:'Solo el administrador puede editar contactos'});const input=await body(req),name=clean(input.name,100),username=clean(input.username,60).toLowerCase(),password=String(input.password||''),position=clean(input.position,100),phone=clean(input.phone,60),email=clean(input.email,120),active=input.active===true;if(!name||!/^[a-z0-9._-]{3,60}$/i.test(username)||(password&&password.length!==4))return json(res,400,{error:'Datos de contacto inválidos'});try{const contact=await mutateDb(db=>{const found=db.users.find(item=>item.id===contactMatch[2]&&item.companyId===contactMatch[1]&&item.role==='client');if(!found)throw Object.assign(new Error('Contacto no encontrado'),{status:404});if(db.users.some(item=>item.id!==found.id&&item.username.toLowerCase()===username))throw Object.assign(new Error('El usuario ya existe'),{status:409});found.name=name;found.username=username;found.position=position;found.phone=phone;found.email=email;found.active=active;found.updatedAt=new Date().toISOString();if(password){const credentials=passwordHash(password);found.salt=credentials.salt;found.passwordHash=credentials.hash;}return publicUser(found);});return json(res,200,{contact});}catch(error){return json(res,error.status||500,{error:error.message});}}
 
-  if(req.method==='POST'&&url.pathname==='/api/chat/groups'){if(user.role!=='admin')return json(res,403,{error:'Solo el administrador puede crear grupos'});const input=await body(req),title=clean(input.title,120),participantIds=[...new Set(Array.isArray(input.participantIds)?input.participantIds.map(id=>clean(id,100)):[])];if(!title||participantIds.length<2)return json(res,400,{error:'Nombre y al menos dos integrantes son obligatorios'});try{const conversation=await mutateDb(db=>{if(participantIds.some(id=>!db.users.some(item=>item.id===id&&item.active&&item.role!=='client')))throw Object.assign(new Error('Los clientes solo pueden estar en el grupo de su empresa'),{status:400});const now=new Date().toISOString(),next={id:crypto.randomUUID(),type:'group',title,companyId:null,createdBy:user.id,createdAt:now,updatedAt:now,pinnedBy:[],settings:{}};db.conversations.push(next);participantIds.forEach(userId=>db.conversationParticipants.push({id:crypto.randomUUID(),conversationId:next.id,userId,role:'member',joinedAt:now,lastReadAt:null,lastReadMessageId:null,muted:false}));return next;});participantIds.forEach(id=>emitChat(id,'conversation',{conversationId:conversation.id}));return json(res,201,{conversation});}catch(error){return json(res,error.status||500,{error:error.message});}}
+  if(req.method==='POST'&&url.pathname==='/api/chat/groups'){if(user.role!=='admin')return json(res,403,{error:'Solo el administrador puede crear grupos'});const input=await body(req),title=clean(input.title,120),participantIds=[...new Set(Array.isArray(input.participantIds)?input.participantIds.map(id=>clean(id,100)):[])];if(!title||participantIds.length<2)return json(res,400,{error:'Nombre y al menos dos integrantes son obligatorios'});try{const conversation=await mutateDb(db=>{if(participantIds.some(id=>!db.users.some(item=>item.id===id&&item.active&&!['client','payroll_employee'].includes(item.role))))throw Object.assign(new Error('Los clientes solo pueden estar en el grupo de su empresa'),{status:400});const now=new Date().toISOString(),next={id:crypto.randomUUID(),type:'group',title,companyId:null,createdBy:user.id,createdAt:now,updatedAt:now,pinnedBy:[],settings:{}};db.conversations.push(next);participantIds.forEach(userId=>db.conversationParticipants.push({id:crypto.randomUUID(),conversationId:next.id,userId,role:'member',joinedAt:now,lastReadAt:null,lastReadMessageId:null,muted:false}));return next;});participantIds.forEach(id=>emitChat(id,'conversation',{conversationId:conversation.id}));return json(res,201,{conversation});}catch(error){return json(res,error.status||500,{error:error.message});}}
 
   if (req.method === 'GET' && url.pathname === '/api/chat/events') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
@@ -604,19 +610,19 @@ async function api(req, res, url) {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/chat/members') {
-    const db=readDb(),members=(user.role==='client'?clientChatContacts(db,user):db.users.filter(item=>item.active&&item.id!==user.id&&item.role!=='client')).map(publicUser).sort((a,b)=>a.name.localeCompare(b.name,'es',{sensitivity:'base'}));
+    const db=readDb(),members=(user.role==='payroll_employee'?[]:user.role==='client'?clientChatContacts(db,user):db.users.filter(item=>item.active&&item.id!==user.id&&!['client','payroll_employee'].includes(item.role))).map(publicUser).sort((a,b)=>a.name.localeCompare(b.name,'es',{sensitivity:'base'}));
     return json(res, 200, { members });
   }
 
   if (req.method === 'GET' && url.pathname === '/api/chat/conversations') {
-    const db = readDb(), memberships = user.role === 'admin' ? db.conversations.map(conversation => ({ conversationId: conversation.id, observer: !chatParticipant(db,conversation.id,user.id) })) : (db.conversationParticipants || []).filter(item => item.userId === user.id && (user.role!=='client'||db.conversations.some(conversation=>conversation.id===item.conversationId&&(conversation.type==='direct'||conversation.companyId===user.companyId))));
+    const db = readDb(), memberships = user.role === 'admin' ? db.conversations.map(conversation => ({ conversationId: conversation.id, observer: !chatParticipant(db,conversation.id,user.id) })) : (db.conversationParticipants || []).filter(item => item.userId === user.id && (user.role!=='payroll_employee'||require('./payroll-chat').owns(db,user,item.conversationId)) && (user.role!=='client'||db.conversations.some(conversation=>conversation.id===item.conversationId&&(conversation.type==='direct'||conversation.companyId===user.companyId))));
     const conversations = memberships.map(membership => {
       const conversation = db.conversations.find(item => item.id === membership.conversationId);
       if (!conversation) return null;
       const participantIds = chatUserIds(db, conversation.id), observer = !participantIds.includes(user.id), otherId = participantIds.find(id => id !== user.id), participantUsers = participantIds.map(id => db.users.find(item => item.id === id)).filter(Boolean), other = conversation.type==='direct'&&!observer ? db.users.find(item => item.id === otherId) : null, displayName = conversation.type==='group' ? conversation.title || 'Grupo' : observer ? participantUsers.map(item=>item.name).join(' ↔ ') : other?.name || 'Usuario eliminado';
       const messages = db.messages.filter(item => item.conversationId === conversation.id && !item.deletedAt && !(item.deletedForUserIds||[]).includes(user.id)).sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
       const last = messages[messages.length - 1], unread = observer ? 0 : (db.messageReceipts || []).filter(item => item.userId === user.id && !item.readAt && messages.some(message => message.id === item.messageId)).length;
-      return { id: conversation.id, type: conversation.type, companyId:conversation.companyId||null, title:conversation.title||null, user: other ? publicUser(other) : { id: conversation.id, name: displayName, username: '', role: 'group', active: true }, participants: participantUsers.map(publicUser), observer, lastMessage: last ? publicMessage(db,last) : null, unread, updatedAt: last?.createdAt || conversation.updatedAt || conversation.createdAt, pinned: (conversation.pinnedBy || []).includes(user.id) };
+      return { id: conversation.id, type: conversation.type, companyId:conversation.companyId||null, title:conversation.title||null, user: conversation.settings?.payrollUserId ? {id:conversation.id,name:user.role==='payroll_employee'?'Nómina · Punches del reloj':conversation.title,username:'',role:'payroll',active:true} : other ? publicUser(other) : { id: conversation.id, name: displayName, username: '', role: 'group', active: true }, participants: participantUsers.map(publicUser), observer, lastMessage: last ? publicMessage(db,last) : null, unread, updatedAt: conversation.settings?.payrollUserId ? conversation.updatedAt : last?.createdAt || conversation.updatedAt || conversation.createdAt, pinned: (conversation.pinnedBy || []).includes(user.id) };
     }).filter(Boolean).sort((a,b)=>(b.pinned-a.pinned)||b.updatedAt.localeCompare(a.updatedAt));
     return json(res, 200, { conversations, totalUnread: conversations.reduce((sum,item)=>sum+item.unread,0) });
   }
@@ -627,7 +633,7 @@ async function api(req, res, url) {
     try {
       const conversation = await mutateDb(db => {
         if (user.role === 'client' && !clientChatContacts(db,user).some(person => person.id === otherId)) throw Object.assign(new Error('Seleccione un vendedor asignado o un administrador activo'), { status: 403 });
-        if (!db.users.some(item => item.id === otherId && item.active && item.role!=='client')) throw Object.assign(new Error('Los contactos cliente solo participan en el grupo de su empresa'), { status: 400 });
+        if (!db.users.some(item => item.id === otherId && item.active && !['client','payroll_employee'].includes(item.role))) throw Object.assign(new Error('Los contactos cliente solo participan en el grupo de su empresa'), { status: 400 });
         const existing = db.conversations.find(item => item.type === 'direct' && chatUserIds(db,item.id).length === 2 && chatUserIds(db,item.id).includes(user.id) && chatUserIds(db,item.id).includes(otherId));
         if (existing) return existing;
         const now = new Date().toISOString(), next = { id: crypto.randomUUID(), type: 'direct', title: null, createdBy: user.id, createdAt: now, updatedAt: now, pinnedBy: [], settings: {} };
@@ -677,7 +683,7 @@ async function api(req, res, url) {
   if(req.method==='DELETE'&&chatMessageMatch){
     try{
       const input=await body(req),scope=input.scope==='everyone'?'everyone':'me';
-      const result=await mutateDb(db=>{const message=db.messages.find(item=>item.id===chatMessageMatch[1]&&!item.deletedAt);if(!message||!chatParticipant(db,message.conversationId,user.id))throw Object.assign(new Error('Mensaje no encontrado'),{status:404});if(message.orderId)throw Object.assign(new Error('Los pedidos se conservan en el chat para mantener su historial'),{status:409});if(scope==='everyone'){if(message.senderId!==user.id)throw Object.assign(new Error('Solo puede borrar para todos sus propios mensajes'),{status:403});message.deletedAt=new Date().toISOString();message.updatedAt=message.deletedAt;db.attachments=(db.attachments||[]).filter(item=>item.messageId!==message.id);db.messageReceipts=(db.messageReceipts||[]).filter(item=>item.messageId!==message.id);}else{message.deletedForUserIds||=[];if(!message.deletedForUserIds.includes(user.id))message.deletedForUserIds.push(user.id);db.messageReceipts=(db.messageReceipts||[]).filter(item=>!(item.messageId===message.id&&item.userId===user.id));}const conversation=db.conversations.find(item=>item.id===message.conversationId);if(conversation)conversation.updatedAt=new Date().toISOString();return{conversationId:message.conversationId,messageId:message.id,scope,userId:user.id};});
+      const result=await mutateDb(db=>{const message=db.messages.find(item=>item.id===chatMessageMatch[1]&&!item.deletedAt);if(!message||!chatParticipant(db,message.conversationId,user.id))throw Object.assign(new Error('Mensaje no encontrado'),{status:404});if(message.payrollTable)throw Object.assign(new Error('La tabla de punches se conserva y actualiza automáticamente'),{status:409});if(message.orderId)throw Object.assign(new Error('Los pedidos se conservan en el chat para mantener su historial'),{status:409});if(scope==='everyone'){if(message.senderId!==user.id)throw Object.assign(new Error('Solo puede borrar para todos sus propios mensajes'),{status:403});message.deletedAt=new Date().toISOString();message.updatedAt=message.deletedAt;db.attachments=(db.attachments||[]).filter(item=>item.messageId!==message.id);db.messageReceipts=(db.messageReceipts||[]).filter(item=>item.messageId!==message.id);}else{message.deletedForUserIds||=[];if(!message.deletedForUserIds.includes(user.id))message.deletedForUserIds.push(user.id);db.messageReceipts=(db.messageReceipts||[]).filter(item=>!(item.messageId===message.id&&item.userId===user.id));}const conversation=db.conversations.find(item=>item.id===message.conversationId);if(conversation)conversation.updatedAt=new Date().toISOString();return{conversationId:message.conversationId,messageId:message.id,scope,userId:user.id};});
       const db=readDb();emitConversation(db,result.conversationId,'message-change',result);return json(res,200,{ok:true,scope});
     }catch(error){return json(res,error.status||500,{error:error.message});}
   }
@@ -686,7 +692,7 @@ async function api(req, res, url) {
   if(req.method==='POST'&&forwardMatch){
     const input=await body(req),targetConversationId=clean(input.conversationId,100);
     try{
-      const forwarded=await mutateDb(db=>{const source=db.messages.find(item=>item.id===forwardMatch[1]&&!item.deletedAt&&!(item.deletedForUserIds||[]).includes(user.id));if(!source)throw Object.assign(new Error('Mensaje no encontrado'),{status:404});if(!chatParticipant(db,source.conversationId,user.id))throw Object.assign(new Error('No pertenece a la conversación original'),{status:403});if(!chatParticipant(db,targetConversationId,user.id))throw Object.assign(new Error('No pertenece a la conversación de destino'),{status:403});const sourceFiles=(db.attachments||[]).filter(item=>item.messageId===source.id);if(!source.text&&!sourceFiles.length)throw Object.assign(new Error('El mensaje no tiene contenido para reenviar'),{status:400});const now=new Date().toISOString(),next={id:crypto.randomUUID(),conversationId:targetConversationId,senderId:user.id,type:source.text&&sourceFiles.length?'mixed':sourceFiles.length?'file':'text',text:source.text||'',replyToMessageId:null,forwardedFromMessageId:source.id,deletedAt:null,createdAt:now,updatedAt:now};db.messages.push(next);sourceFiles.forEach(file=>db.attachments.push({...file,id:crypto.randomUUID(),messageId:next.id,conversationId:targetConversationId,createdAt:now}));chatUserIds(db,targetConversationId).forEach(userId=>db.messageReceipts.push({id:crypto.randomUUID(),messageId:next.id,userId,deliveredAt:userId===user.id?now:null,readAt:userId===user.id?now:null}));const conversation=db.conversations.find(item=>item.id===targetConversationId);if(conversation)conversation.updatedAt=now;return next;});
+      const forwarded=await mutateDb(db=>{const source=db.messages.find(item=>item.id===forwardMatch[1]&&!item.deletedAt&&!(item.deletedForUserIds||[]).includes(user.id));if(!source)throw Object.assign(new Error('Mensaje no encontrado'),{status:404});if(!chatParticipant(db,source.conversationId,user.id))throw Object.assign(new Error('No pertenece a la conversación original'),{status:403});if(!chatParticipant(db,targetConversationId,user.id))throw Object.assign(new Error('No pertenece a la conversación de destino'),{status:403});if(source.payrollTable)throw Object.assign(new Error('La tabla de punches es privada y no se reenvía'),{status:403});const sourceFiles=(db.attachments||[]).filter(item=>item.messageId===source.id);if(!source.text&&!sourceFiles.length)throw Object.assign(new Error('El mensaje no tiene contenido para reenviar'),{status:400});const now=new Date().toISOString(),next={id:crypto.randomUUID(),conversationId:targetConversationId,senderId:user.id,type:source.text&&sourceFiles.length?'mixed':sourceFiles.length?'file':'text',text:source.text||'',replyToMessageId:null,forwardedFromMessageId:source.id,deletedAt:null,createdAt:now,updatedAt:now};db.messages.push(next);sourceFiles.forEach(file=>db.attachments.push({...file,id:crypto.randomUUID(),messageId:next.id,conversationId:targetConversationId,createdAt:now}));chatUserIds(db,targetConversationId).forEach(userId=>db.messageReceipts.push({id:crypto.randomUUID(),messageId:next.id,userId,deliveredAt:userId===user.id?now:null,readAt:userId===user.id?now:null}));const conversation=db.conversations.find(item=>item.id===targetConversationId);if(conversation)conversation.updatedAt=now;return next;});
       const db=readDb(),payload=publicMessage(db,forwarded);emitConversation(db,targetConversationId,'message',payload);for(const recipientId of chatUserIds(db,targetConversationId).filter(id=>id!==user.id)){const badgeCount=db.messageReceipts.filter(receipt=>receipt.userId===recipientId&&!receipt.readAt).length;await notifyUser(recipientId,{title:user.name,body:'Reenvió un mensaje',url:`/#chat/${targetConversationId}`,badgeCount});}return json(res,201,{message:payload});
     }catch(error){return json(res,error.status||500,{error:error.message});}
   }
@@ -719,7 +725,7 @@ async function api(req, res, url) {
     if (!title || rawTitle.length > 50 || !assigneeId || !validDate(dueDate)) return json(res, 400, { error: 'Título de hasta 50 caracteres, empleado asignado y fecha de terminación válida son obligatorios' });
     try {
       const task = await mutateDb(db => {
-        if (!db.users.some(item => item.id === assigneeId && item.active)) throw Object.assign(new Error('El empleado asignado no existe'), { status: 400 });
+        if (!db.users.some(item => item.id === assigneeId && item.active && item.role !== 'payroll_employee')) throw Object.assign(new Error('El empleado asignado no existe'), { status: 400 });
         const now = new Date().toISOString();
         const next = { id: crypto.randomUUID(), title, description, notes: [], creatorId: user.id, assigneeId, dueDate, progress: 0, acknowledgedAt: null, createdAt: now, updatedAt: now, completedAt: null };
         db.tasks.push(next); return next;
@@ -739,7 +745,7 @@ async function api(req, res, url) {
         const found = db.tasks.find(item => item.id === taskId);
         if (!found) throw Object.assign(new Error('Tarea no encontrada'), { status: 404 });
         if (found.creatorId !== user.id && user.role !== 'admin') throw Object.assign(new Error('Solo quien creó la tarea o el administrador pueden editarla'), { status: 403 });
-        if (!db.users.some(item => item.id === assigneeId && item.active)) throw Object.assign(new Error('El empleado asignado no existe'), { status: 400 });
+        if (!db.users.some(item => item.id === assigneeId && item.active && item.role !== 'payroll_employee')) throw Object.assign(new Error('El empleado asignado no existe'), { status: 400 });
         const reassigned = found.assigneeId !== assigneeId;
         found.title = title; found.assigneeId = assigneeId; found.dueDate = dueDate; found.updatedAt = new Date().toISOString();
         if (reassigned) found.acknowledgedAt = null;
@@ -819,7 +825,7 @@ async function api(req, res, url) {
     if (!name || !responsibleId) return json(res, 400, { error: 'Nombre y responsable son obligatorios' });
     try {
       const machine = await mutateDb(db => {
-        if (!db.users.some(item => item.id === responsibleId && item.active)) throw Object.assign(new Error('El responsable no existe'), { status: 400 });
+        if (!db.users.some(item => item.id === responsibleId && item.active && item.role !== 'payroll_employee')) throw Object.assign(new Error('El responsable no existe'), { status: 400 });
         if ((db.machines || []).some(item => item.name.toLowerCase() === name.toLowerCase())) throw Object.assign(new Error('Ya existe una maquinaria con ese nombre'), { status: 409 });
         const now = new Date().toISOString(), next = { id: crypto.randomUUID(), name, company, responsibleId, createdAt: now, updatedAt: now };
         db.machines ||= []; db.machines.push(next); return next;
@@ -837,7 +843,7 @@ async function api(req, res, url) {
       const result = await mutateDb(db => {
         const found = (db.machines || []).find(item => item.id === machineId);
         if (!found) throw Object.assign(new Error('Maquinaria no encontrada'), { status: 404 });
-        if (!db.users.some(item => item.id === responsibleId && item.active)) throw Object.assign(new Error('El responsable no existe'), { status: 400 });
+        if (!db.users.some(item => item.id === responsibleId && item.active && item.role !== 'payroll_employee')) throw Object.assign(new Error('El responsable no existe'), { status: 400 });
         if (db.machines.some(item => item.id !== machineId && item.name.toLowerCase() === name.toLowerCase())) throw Object.assign(new Error('Ya existe una maquinaria con ese nombre'), { status: 409 });
         const changed = found.responsibleId !== responsibleId;
         found.name = name; found.company = company; found.responsibleId = responsibleId; found.updatedAt = new Date().toISOString();
