@@ -14,3 +14,5 @@
 .payroll-chat-table .payroll-worked{font-weight:700;white-space:normal;overflow-wrap:anywhere;background:#f1f7f2;font-size:11px}
 @media(max-width:600px){.payroll-chat-table thead th{font-size:10px}.payroll-chat-table .payroll-worked{font-size:10px}}
 .payroll-chat-table thead th:last-child{white-space:normal;overflow-wrap:anywhere}
+
+.payroll-chat-table tfoot th,.payroll-chat-table tfoot td{background:#d9ebde;font-weight:700;border-top:2px solid #7ba58a}.payroll-chat-table tfoot th{text-align:right;white-space:normal;padding:10px 8px}
