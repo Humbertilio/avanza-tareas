@@ -20,7 +20,13 @@ function validateReport(input) {
       if (+p.slice(11,13)>23 || +p.slice(14,16)>59 || +p.slice(17,19)>59) fail(400,'Hora inválida');
       return p.replace('T',' ');
     });
-    return {date: expected, punches};
+    const result={date: expected, punches};
+    if(Object.hasOwn(row,'workedSeconds')){
+      if(row.workedSeconds!==null&&(!Number.isSafeInteger(row.workedSeconds)||row.workedSeconds<0||row.workedSeconds>172800))fail(400,'Horas trabajadas inválidas');
+      if(!['','Pendiente','Incompleto','Sin turno'].includes(row.workedStatus))fail(400,'Estado de horas inválido');
+      result.workedSeconds=row.workedSeconds;result.workedStatus=row.workedStatus;
+    }
+    return result;
   });
   const employeeId = text(input.employeeId,100);
   if (!employeeId) fail(400,'Falta el empleado');
