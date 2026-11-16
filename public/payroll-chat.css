@@ -11,3 +11,6 @@
   #appView.chat-mode:has(.payroll-chat-table) .message-list{flex:1 0 auto;overflow:visible}
   #appView.chat-mode:has(.payroll-chat-table) .payroll-chat-scroll{overflow:visible}
 }
+.payroll-chat-table .payroll-worked{font-weight:700;white-space:normal;overflow-wrap:anywhere;background:#f1f7f2;font-size:11px}
+@media(max-width:600px){.payroll-chat-table thead th{font-size:10px}.payroll-chat-table .payroll-worked{font-size:10px}}
+.payroll-chat-table thead th:last-child{white-space:normal;overflow-wrap:anywhere}
