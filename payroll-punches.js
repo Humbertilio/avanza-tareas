@@ -21,6 +21,12 @@ function validateReport(input) {
       return p.replace('T',' ');
     });
     const result={date: expected, punches};
+    if(Object.hasOwn(row,'originals')){
+      const validTime=p=>typeof p==='string'&&/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(p)&&Number.isFinite(Date.parse(p.replace(' ','T')+'Z'))&&p.slice(11,13)<='23'&&p.slice(14,16)<='59'&&p.slice(17)<='59'&&p.slice(0,10)>=from&&p.slice(0,10)<=to;
+      if(!Array.isArray(row.originals)||row.originals.length>1000||row.originals.some(p=>!validTime(p)||p.slice(0,10)!==expected))fail(400,'Originales inválidos');
+      if(!Array.isArray(row.adjustments)||row.adjustments.length>1000||row.adjustments.some(p=>!validTime(p.time)||!Number.isInteger(p.slot)||p.slot<0||p.slot>3||!['active','void'].includes(p.status)||!Number.isSafeInteger(p.version)||p.version<1))fail(400,'Ajustes inválidos');
+      result.originals=[...new Set(row.originals)].sort();result.adjustments=row.adjustments.map(p=>({time:p.time,slot:p.slot,status:p.status,version:p.version}));
+    }
     if(Object.hasOwn(row,'workedSeconds')){
       if(row.workedSeconds!==null&&(!Number.isSafeInteger(row.workedSeconds)||row.workedSeconds<0||row.workedSeconds>172800))fail(400,'Horas trabajadas inválidas');
       if(!['','Pendiente','Incompleto','Sin turno'].includes(row.workedStatus))fail(400,'Estado de horas inválido');
