@@ -64,6 +64,23 @@ function createHandler({readDb,mutateDb,body,json,currentUser,passwordHash,emitC
         if (!['GET','HEAD'].includes(req.method) && req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) fail(403,'Origen no autorizado');
       }
       const admin=()=>{if(actor.role!=='admin')fail(403,'Solo el administrador');};
+      if(route==='refresh' && req.method==='POST') {
+        const result=await mutateDb(db=>{const p=state(db),employeeId=actor.role==='admin'?null:p.links.find(l=>l.userId===actor.id)?.employeeId;
+          if(actor.role!=='admin'&&!activeLink(db,p,employeeId))fail(403,'Cuenta sin vínculo activo');
+          p.refreshRequests ||= [];p.refreshRequests=p.refreshRequests.filter(r=>r.state==='pending'||Date.parse(r.createdAt)>Date.now()-86400000);
+          let request=p.refreshRequests.find(r=>r.state==='pending'&&r.employeeId===employeeId);
+          if(!request){if(p.refreshRequests.filter(r=>r.state==='pending').length>=100)fail(429,'Hay actualizaciones pendientes. Intente más tarde.');request={id:crypto.randomUUID(),employeeId,state:'pending',createdAt:new Date().toISOString()};p.refreshRequests.push(request);}
+          return {id:request.id,state:request.state};});json(res,202,result);return true;
+      }
+      if(route==='refresh-status'&&req.method==='GET'){
+        const p=state(readDb()),r=p.refreshRequests?.find(r=>r.id===url.searchParams.get('id'));
+        if(!r||(actor.role!=='admin'&&r.employeeId!==p.links.find(l=>l.userId===actor.id)?.employeeId))fail(404,'Solicitud no encontrada');
+        json(res,200,{id:r.id,state:r.state,error:r.error||''});return true;
+      }
+      if(route==='integration/refresh-requests'&&req.method==='GET'){json(res,200,{requests:(state(readDb()).refreshRequests||[]).filter(r=>r.state==='pending').slice(0,100)});return true;}
+      if(route==='integration/refresh-complete'&&req.method==='POST'){
+        const input=await body(req);await mutateDb(db=>{const r=state(db).refreshRequests?.find(r=>r.id===input.id);if(!r)fail(404,'Solicitud no encontrada');if(r.state==='pending'){r.state=input.ok===true?'complete':'error';r.error=input.ok===true?'':text(input.error,200);r.completedAt=new Date().toISOString();}});json(res,200,{ok:true});return true;
+      }
       if(route==='connection' && req.method==='POST') {
         admin(); const token=crypto.randomBytes(32).toString('hex');
         await mutateDb(db=>{const p=state(db);p.tokenHash=hash(token);p.senderAdminId=actor.id;audit(p,actor.id,'connection-renewed',{});});
